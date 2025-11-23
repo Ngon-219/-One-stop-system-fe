@@ -5,6 +5,8 @@ import axios from "axios";
 import { loginNotMfaApi } from "../api/auth_service";
 import { LoginRequest } from "../api/interface/request/login";
 import Swal from "sweetalert2";
+import { useAuth } from "../context/AuthContext";
+import { useRouter } from "next/navigation";
 
 const LoginPage = () => {
   const [username, setUsername] = useState("");
@@ -12,42 +14,69 @@ const LoginPage = () => {
   const [authenticatorCode, setAuthenticatorCode] = useState<string>("");
   const [rememberMe, setRememberMe] = useState(false);
   const [mfaHidden,setMfaHidden] = useState(false);
+  
+  const { login } = useAuth();
+  const router = useRouter();
 
   const handleLogin = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
-    if (rememberMe) {
-      console.log("Remember me logic");
-      let req: LoginRequest = {
-        email: username,
-        password: password,
-      };
-      
-      if (authenticatorCode && authenticatorCode.trim() !== "") {
-        req.authenticatorCode = authenticatorCode;
-      }
-
-      let response = await loginNotMfaApi(req);
-      if (response.status_code == 400) {
-        setMfaHidden(true);
-        Swal.fire({
-          title: "You already enable MFA",
-          text: response.message,
-          icon: "question"
-        });
-      }
-
-      if (response.status_code == 401) {
-        Swal.fire({
-          icon: "error",
-          title: "Login Failed",
-          text: response.message + "!",
-        });
-      }
-    } else {
-      console.log("No remember me logic");
-    }
     
-    console.log("Login attempt:", { username, password, rememberMe });
+    let req: LoginRequest = {
+      email: username,
+      password: password,
+    };
+    
+    if (authenticatorCode && authenticatorCode.trim() !== "") {
+      req.authenticatorCode = authenticatorCode;
+    }
+
+    let response = await loginNotMfaApi(req);
+    
+    if (response.status_code == 400) {
+      setMfaHidden(true);
+      Swal.fire({
+        title: "You already enable MFA",
+        text: response.message,
+        icon: "question"
+      });
+      return;
+    }
+
+    if (response.status_code == 401) {
+      Swal.fire({
+        icon: "error",
+        title: "Login Failed",
+        text: response.message + "!",
+      });
+      return;
+    }
+
+    if (response.status_code == 200) {
+      login(response, rememberMe);
+
+      Swal.fire({
+        title: "Good job!",
+        text: "Login successful",
+        icon: "success"
+      });
+
+      switch (response.role) {
+        case "admin": {
+          router.push("/manager/dashboard");
+          break;
+        }
+
+        case "student": {
+          router.push("/home");
+          break;
+        }
+
+        default: {
+          router.push("/");
+          break;
+        }
+      }
+    }
   };
 
   return (
