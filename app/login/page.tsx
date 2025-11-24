@@ -55,7 +55,7 @@ const LoginPage = () => {
       login(response, rememberMe);
 
       Swal.fire({
-        title: "Good job!",
+        title: "Login Successful",
         text: "Login successful",
         icon: "success"
       });
@@ -165,18 +165,6 @@ const LoginPage = () => {
               Login
             </button>
           </form>
-          
-          <div className="mt-6 text-center">
-            <p className="text-sm text-gray-600">
-              Don't have an account?{" "}
-              <a 
-                href="#" 
-                className="text-blue-600 hover:text-blue-700 font-medium transition-colors duration-200"
-              >
-                Sign up
-              </a>
-            </p>
-          </div>
         </div>
       </div>
     </div>

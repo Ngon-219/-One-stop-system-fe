@@ -28,6 +28,29 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const [loading, setLoading] = useState(true);
   const router = useRouter();
 
+  const getCookie = (name: string) => {
+    if (typeof document === "undefined") return null;
+    const value = document.cookie
+      ?.split("; ")
+      .find((row) => row.startsWith(`${name}=`))
+      ?.split("=")[1];
+    return value ? decodeURIComponent(value) : null;
+  };
+
+  const setCookie = (name: string, value: string | null, rememberMe: boolean) => {
+    if (typeof document === "undefined" || !value) return;
+    const baseOptions = `path=/; SameSite=Lax`;
+    const cookieOptions = rememberMe
+      ? `${baseOptions}; max-age=${60 * 60 * 24 * 7}`
+      : baseOptions;
+    document.cookie = `${name}=${encodeURIComponent(value)}; ${cookieOptions}`;
+  };
+
+  const removeCookie = (name: string) => {
+    if (typeof document === "undefined") return;
+    document.cookie = `${name}=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT`;
+  };
+
   useEffect(() => {
     checkUserLoggedIn();
   }, []);
@@ -39,13 +62,13 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         return;
       }
 
-      const access_token = localStorage.getItem("huce_access_token");
+      const access_token = getCookie("huce_access_token");
       
       if (access_token) {
-        const email = localStorage.getItem("huce_email") || "";
-        const expires_in = localStorage.getItem("huce_expires_in") || "";
-        const role = localStorage.getItem("huce_role") || "";
-        const user_id = localStorage.getItem("huce_user_id") || "";
+        const email = getCookie("huce_email") || "";
+        const expires_in = getCookie("huce_expires_in") || "";
+        const role = getCookie("huce_role") || "";
+        const user_id = getCookie("huce_user_id") || "";
         
         setUser({
           access_token: access_token,
@@ -75,50 +98,23 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         user_id: response.user_id || "",
       };
 
-      if (typeof window !== "undefined") {
-        // Luôn lưu token vào cookie để middleware có thể check
-        // Cookie sẽ tự động expire khi đóng browser nếu không set max-age
-        const cookieOptions = rememberMe 
-          ? `max-age=${60 * 60 * 24 * 7}; path=/; SameSite=Lax` // 7 ngày nếu remember me
-          : `path=/; SameSite=Lax`; // Session cookie nếu không remember
-        
-        document.cookie = `huce_access_token=${response.access_token}; ${cookieOptions}`;
-        document.cookie = `huce_role=${response.role}; ${cookieOptions}`;
-        
-        if (rememberMe) {
-          localStorage.setItem("huce_access_token", response.access_token);
-          if (response.email) {
-            localStorage.setItem("huce_email", response.email);
-          }
-          if (response.expires_in) {
-            localStorage.setItem("huce_expires_in", response.expires_in);
-          }
-          if (response.role) {
-            localStorage.setItem("huce_role", response.role);
-          }
-          if (response.user_id) {
-            localStorage.setItem("huce_user_id", response.user_id);
-          }
-        }
-      }
+      setCookie("huce_access_token", response.access_token, rememberMe);
+      setCookie("huce_role", response.role || "", rememberMe);
+      setCookie("huce_email", response.email || "", rememberMe);
+      setCookie("huce_expires_in", response.expires_in || "", rememberMe);
+      setCookie("huce_user_id", response.user_id || "", rememberMe);
 
       setUser(userData);
     }
   };
 
   const logout = () => {
-    if (typeof window !== "undefined") {
-      localStorage.removeItem("huce_access_token");
-      localStorage.removeItem("huce_email");
-      localStorage.removeItem("huce_expires_in");
-      localStorage.removeItem("huce_role");
-      localStorage.removeItem("huce_user_id");
-      
-      // Xóa tất cả cookies
-      document.cookie = "huce_access_token=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT";
-      document.cookie = "huce_role=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT";
-    }
-    
+    removeCookie("huce_access_token");
+    removeCookie("huce_email");
+    removeCookie("huce_expires_in");
+    removeCookie("huce_role");
+    removeCookie("huce_user_id");
+
     setUser(null);
     router.push("/login");
   };

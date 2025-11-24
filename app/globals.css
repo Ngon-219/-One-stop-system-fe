@@ -14,7 +14,7 @@
 
 @media (prefers-color-scheme: dark) {
   :root {
-    --background: #f6e8e8;
+    --background: #f7f7f7;
     --foreground: #090909;
   }
 }
@@ -23,4 +23,13 @@ body {
   background: linear-gradient(to bottom right, #eff6ff, #ffffff, #faf5ff);
   color: var(--foreground);
   font-family: time;
+}
+
+body.hide-chrome header,
+body.hide-chrome footer {
+  display: none !important;
+}
+
+body.hide-header header {
+  display: none !important;
 }

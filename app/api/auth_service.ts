@@ -2,6 +2,8 @@ import axios from "axios";
 import { LoginRequest } from "./interface/request/login";
 import { LoginResponse } from "./interface/response/login";
 import { parseAndFormatMessage } from "../utils/messageParser";
+import { ProfileResponse } from "./interface/response/profile";
+import { getCookie } from "./helper";
 
 export const loginNotMfaApi = async (request: LoginRequest) => {
     const baseUrl = process.env.NEXT_PUBLIC_AUTH_SERVICE_URL;
@@ -24,7 +26,6 @@ export const loginNotMfaApi = async (request: LoginRequest) => {
             email: response.data.email,
             expires_in: response.data.expires_in,
             role: response.data.role,
-            token_type: response.data.token_type,
             user_id: response.data.user_id,
             message: "Login successfull",
         };
@@ -48,6 +49,40 @@ export const loginNotMfaApi = async (request: LoginRequest) => {
             message: formattedMessage,   
         };
         return res;
+    })
+
+    return response;
+}
+
+export const profileApi = async () => {
+    let access_token = getCookie("huce_access_token")
+    console.log("Access token: ", access_token);
+    let baseUrl = process.env.NEXT_PUBLIC_AUTH_SERVICE_URL;
+    let url = baseUrl + "/api/v1/profile";
+
+    console.log("base url: ", url);
+
+    let response = await axios.get(url, {
+        headers: {
+            "Authorization": `Bearer ${access_token}`
+        }
+    })
+    .then(response => {
+        let res: ProfileResponse = {
+            user_id: response.data.user_id,
+            first_name: response.data.first_name,
+            last_name: response.data.last_name,
+            email: response.data.email,
+            role: response.data.role,
+            wallet_address: response.data.wallet_address,
+            blockchain_role: response.data.blockchain_role,
+            is_active: response.data.is_active
+        }
+        return res;
+    })
+    .catch(error => {
+        console.log("Error login message: ", error);
+        throw error;
     })
 
     return response;
