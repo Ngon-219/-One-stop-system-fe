@@ -20,21 +20,30 @@ const LoginPage = () => {
   const { login } = useAuth();
   const router = useRouter();
 
-  // Tự động focus vào ô đầu tiên khi MFA được hiển thị
+  const { isAuthenticated, loading, user } = useAuth();
+
+  useEffect(() => {
+    if (isAuthenticated && !loading) {
+      if (user?.role == "student") {
+        router.push("/home");
+      } else {
+        router.push("/manager/dashboard");
+      }
+    }
+  }, [isAuthenticated, loading, user, router]);
+
   useEffect(() => {
     if (mfaHidden) {
       setTimeout(() => {
         mfaInputRefs.current[0]?.focus();
       }, 100);
     } else {
-      // Reset các ô khi ẩn MFA
       setMfaDigits(["", "", "", "", "", ""]);
       setAuthenticatorCode("");
     }
   }, [mfaHidden]);
 
   const handleMfaDigitChange = (index: number, value: string) => {
-    // Chỉ cho phép số
     if (value && !/^\d$/.test(value)) {
       return;
     }
@@ -43,11 +52,9 @@ const LoginPage = () => {
     newDigits[index] = value;
     setMfaDigits(newDigits);
     
-    // Cập nhật authenticatorCode từ mảng digits
     const code = newDigits.join("");
     setAuthenticatorCode(code);
 
-    // Tự động chuyển sang ô tiếp theo khi nhập số
     if (value && index < 5) {
       mfaInputRefs.current[index + 1]?.focus();
     }
@@ -59,7 +66,6 @@ const LoginPage = () => {
       mfaInputRefs.current[index - 1]?.focus();
     }
     
-    // Xử lý paste
     if (e.key === "v" && (e.ctrlKey || e.metaKey)) {
       e.preventDefault();
       navigator.clipboard.readText().then((text) => {
@@ -73,7 +79,6 @@ const LoginPage = () => {
         setMfaDigits(newDigits);
         setAuthenticatorCode(newDigits.join(""));
         
-        // Focus vào ô cuối cùng đã nhập
         const lastIndex = Math.min(index + digits.length - 1, 5);
         mfaInputRefs.current[lastIndex]?.focus();
       });

@@ -9,11 +9,21 @@ import Swal from "sweetalert2";
 import { NavBar } from "../components/navbar";
 
 const HomePage = () => {
-  const { isAuthenticated, loading } = useAuth();
+  const { isAuthenticated, loading, user } = useAuth();
   const router = useRouter();
   useEffect(() => {
     if (!loading && !isAuthenticated) {
       router.replace("/login");
+    }
+
+    if (!loading && user?.role != "student") {
+      Swal.fire({
+        icon: "question",
+        title: "Bạn không có quyền truy cập trang này!",
+        text: "Trang hiện tại chỉ dành cho sinh viên. Tự động quay về trang manager dashboard",
+      });
+
+      router.replace("manager/dashboard");
     }
   }, [loading, isAuthenticated, router]);
 
