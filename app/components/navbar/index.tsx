@@ -7,11 +7,6 @@ import { ProfileResponse } from "@/app/api/interface/response/profile";
 import { LogoutResponse } from "@/app/api/interface/response/logout";
 import Swal from "sweetalert2";
 
-const navTabs = [
-  { label: "Dịch vụ", icon: "📋", href: "/services", active: true },
-  { label: "Hóa đơn", icon: "🧾", href: "/billing", active: false }
-];
-
 export const NavBar = () => {
   let {logout, user} = useAuth();
   let [userResponse, setUserResponse] = useState<ProfileResponse>();
@@ -44,26 +39,8 @@ export const NavBar = () => {
   }, [])
 
   return (
-    <div className="w-full bg-[#f7f7f7] py-8">
+    <div className="w-full bg-[#f7f7f7] py-8 mb-[2vh]">
       <div className="max-w-6xl px-4 mx-auto space-y-6">
-        {/* Top navigation tabs */}
-        <div className="flex flex-wrap items-center gap-4 bg-white border border-gray-200 rounded-2xl shadow-sm px-4 py-3">
-          {navTabs.map((tab) => (
-            <a
-              key={tab.label}
-              href={tab.href}
-              className={`flex items-center gap-2 rounded-xl px-4 py-2 text-sm font-semibold transition-colors ${
-                tab.active
-                  ? "bg-[#f0f7ff] text-[#0f6ab4]"
-                  : "text-gray-500 hover:bg-gray-50"
-              }`}
-            >
-              <span>{tab.icon}</span>
-              {tab.label}
-            </a>
-          ))}
-        </div>
-
         {/* Hero */}
         <div className="relative overflow-hidden rounded-3xl">
           <div className="absolute inset-0 bg-linear-to-r from-[#192441]/90 via-[#1f2e52]/70 to-transparent z-10" />

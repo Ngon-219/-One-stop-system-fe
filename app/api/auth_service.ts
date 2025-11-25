@@ -5,6 +5,10 @@ import { parseAndFormatMessage } from "../utils/messageParser";
 import { ProfileResponse } from "./interface/response/profile";
 import { getCookie } from "./helper";
 import { LogoutResponse } from "./interface/response/logout";
+import { getUserPaginationReq } from "./interface/request/get_user";
+import { GetUserPaginationResponse } from "./interface/response/get_user_pagination";
+import { error } from "console";
+import { DeleteUserResponse } from "./interface/response/delete_user";
 
 export const loginNotMfaApi = async (request: LoginRequest) => {
     const baseUrl = process.env.NEXT_PUBLIC_AUTH_SERVICE_URL;
@@ -111,6 +115,76 @@ export const logoutApi = async () => {
             status_code: err.response.status,
             message: err.response.data
         };
+        return res;
+    })
+
+    return response;
+}
+
+export const getUserPagination = async (req: getUserPaginationReq) => {
+    let baseUrl = process.env.NEXT_PUBLIC_AUTH_SERVICE_URL;
+    let url = baseUrl + `/api/v1/users?page=${req.page}&page_size=${req.limit}`;
+    let access_token = getCookie("huce_access_token");
+    
+    if (req.role) {
+        url += `&role=${req.role}`;
+    }
+
+    if (req.search) {
+        url += `&search=${req.search}`;
+    }
+    
+    let response = await axios.get(url, {
+        headers: {
+            "Authorization": `Bearer ${access_token}`
+        }
+    })
+    .then(response => {
+        let res: GetUserPaginationResponse = {
+            users: response.data.users,
+            total: response.data.total,
+            page: response.data.page,
+            page_size: response.data.page_size
+        }
+        return res;
+    })
+    .catch(error => {
+        console.error(error);
+        let res: GetUserPaginationResponse = {
+            users: [],
+            total: 0,
+            page: 0,
+            page_size: 0
+        }
+        return res;
+    });
+
+    return response;
+}
+
+export const deleteUserApi = async (user_id: string) => {
+    let baseUrl = process.env.NEXT_PUBLIC_AUTH_SERVICE_URL;
+    let url = baseUrl + `/api/v1/users/${user_id}`;
+    let access_token = getCookie("huce_access_token");
+
+    let response = await axios.delete(url, {
+        headers: {
+            "Authorization": `Bearer ${access_token}`
+        }
+    })
+    .then(response => {
+        let res: DeleteUserResponse = {
+            status_code: response.status,
+            message: "User deleted successfully"
+        }
+        return res;
+    })
+    .catch(error => {
+        console.error(error);
+        let res: DeleteUserResponse = {
+            status_code: error.response.status,
+            message: error.response.data
+        }
         return res;
     })
 
