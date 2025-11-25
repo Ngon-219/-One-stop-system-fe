@@ -3,7 +3,7 @@ import { getUserPagination } from "@/app/api/auth_service";
 import { getUserPaginationReq } from "@/app/api/interface/request/get_user";
 import { GetUserPaginationResponse, User } from "@/app/api/interface/response/get_user_pagination";
 import NavBar from "@/app/components/navbar"
-import { Table, Button, Tooltip } from 'antd';
+import { Table, Button, Tooltip, Input } from 'antd';
 import { useEffect, useState } from "react";
 import { EyeOutlined, EditOutlined, DeleteOutlined } from '@ant-design/icons';
 import Swal from "sweetalert2";
@@ -25,31 +25,46 @@ export default function UserManagePage() {
     let [currentPage, setCurrentPage] = useState<number>(1);
     let [pageSize, setPageSize] = useState<number>(10);
     let [total, setTotal] = useState<number>(0);
+    let [searchValue, setSearchValue] = useState<string>("");
+    let [loading, setLoading] = useState<boolean>(false);
 
-    const fetchUsers = async (limit: number = 10, page: number = 1) => {
+    const fetchUsers = async (params?: { limit?: number; page?: number; search?: string }) => {
+        const { limit = pageSize, page = currentPage, search = searchValue } = params ?? {};
         let req: getUserPaginationReq = {
             limit: limit,
-            page: page
+            page: page,
         };
-        let response: GetUserPaginationResponse = await getUserPagination(req);
-        
-        const formated_users = response.users.map((user: User) => {
-            return {
-                key: user.user_id,
-                userID: user.user_id,
-                fullname: `${user.first_name} ${user.last_name}`.trim(),
-                address: user.address,
-                email: user.email,
-                major: user.major_names.join(", ").trim(),
-                studentCode: user.student_code,
-            }
-        });
 
-        setTotal(response.total);
-        setCurrentPage(response.page);
-        setPageSize(response.page_size);
+        if (search.trim()) {
+            req.search = search.trim();
+        }
+
+        setLoading(true);
+        try {
+            let response: GetUserPaginationResponse = await getUserPagination(req);
         
-        setDataSource(formated_users);
+            const formated_users = response.users.map((user: User) => {
+                return {
+                    key: user.user_id,
+                    userID: user.user_id,
+                    fullname: `${user.first_name} ${user.last_name}`.trim(),
+                    address: user.address,
+                    email: user.email,
+                    major: user.major_names.join(", ").trim(),
+                    studentCode: user.student_code,
+                }
+            });
+
+            setTotal(response.total);
+            setCurrentPage(response.page);
+            setPageSize(response.page_size);
+            
+            setDataSource(formated_users);
+        } catch (err) {
+            console.error("Failed to fetch users", err);
+        } finally {
+            setLoading(false);
+        }
     }
 
     useEffect(() => {
@@ -158,21 +173,48 @@ export default function UserManagePage() {
         },
       ];
 
+    const handleSearch = (value: string) => {
+        const sanitizedValue = value.trim();
+        setSearchValue(value);
+        fetchUsers({ page: 1, search: sanitizedValue, limit: pageSize });
+    };
+
+    const handleSearchInputChange = (value: string) => {
+        setSearchValue(value);
+        if (!value.trim()) {
+            fetchUsers({ page: 1, search: "", limit: pageSize });
+        }
+    };
+
     return (
         <div className="h-full w-full flex flex-col items-center justify-center">
             <NavBar />
+            <div className="w-[90vw] flex justify-end mb-4">
+                <Input.Search
+                    allowClear
+                    placeholder="Tìm kiếm theo tên, email hoặc MSV"
+                    enterButton="Tìm"
+                    value={searchValue}
+                    onChange={(e) => handleSearchInputChange(e.target.value)}
+                    onSearch={handleSearch}
+                    className="max-w-md"
+                />
+            </div>
             <Table 
                 dataSource={dataSource}
                 columns={columns}
+                loading={loading}
                 pagination={{
                     current: currentPage,
                     pageSize: pageSize,
                     total: total,
-                    onChange: (page: number, pageSize: number) => {
-                        fetchUsers(pageSize, page);
+                    onChange: (page: number, newPageSize: number) => {
+                        fetchUsers({ limit: newPageSize, page });
                     },
                 }}
-                className="w-[90vw] rounded-3xl shadow-xl"/>
+                className="w-[90vw] rounded-3xl shadow-xl"
+                scroll={{ x: 1000 }}
+                />
         </div>
     )
 }

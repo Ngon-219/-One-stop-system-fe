@@ -40,7 +40,7 @@ export const NavBar = () => {
 
   return (
     <div className="w-full bg-[#f7f7f7] py-8 mb-[2vh]">
-      <div className="max-w-6xl px-4 mx-auto space-y-6">
+      <div className="w-[90vw] px-4 mx-auto space-y-6">
         {/* Hero */}
         <div className="relative overflow-hidden rounded-3xl">
           <div className="absolute inset-0 bg-linear-to-r from-[#192441]/90 via-[#1f2e52]/70 to-transparent z-10" />
