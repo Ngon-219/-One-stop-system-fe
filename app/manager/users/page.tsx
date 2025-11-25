@@ -9,6 +9,7 @@ import { EyeOutlined, EditOutlined, DeleteOutlined } from '@ant-design/icons';
 import Swal from "sweetalert2";
 import { deleteUserApi } from "@/app/api/auth_service";
 import { DeleteUserResponse } from "@/app/api/interface/response/delete_user";
+import { useRouter } from "next/navigation";
 
 interface TableUser {
     studentCode: string;
@@ -28,6 +29,7 @@ export default function UserManagePage() {
     let [searchValue, setSearchValue] = useState<string>("");
     let [loading, setLoading] = useState<boolean>(false);
     let [selectedRole, setSelectedRole] = useState<string | undefined>(undefined);
+    const router = useRouter();
 
     const fetchUsers = async (params?: { limit?: number; page?: number; search?: string; role?: string }) => {
         const {
@@ -202,6 +204,11 @@ export default function UserManagePage() {
         fetchUsers({ page: 1, search: searchValue.trim(), role: roleValue, limit: pageSize });
     };
 
+    const handleAddUser = () => {
+        console.log("handleAddUser called");
+        router.push("/manager/create-user");
+    };
+
     return (
         <div className="h-full w-full flex flex-col items-center justify-center">
             <NavBar />
@@ -226,8 +233,13 @@ export default function UserManagePage() {
                     value={searchValue}
                     onChange={(e) => handleSearchInputChange(e.target.value)}
                     onSearch={handleSearch}
-                    className="max-w-md w-full sm:w-auto"
+                    className="w-full sm:w-auto"
                 />
+            </div>
+            <div className="w-[90vw] flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between mb-4">
+                <Button type="primary" onClick={handleAddUser} className="w-full sm:w-auto">
+                        Thêm người dùng
+                </Button>
             </div>
             <Table 
                 dataSource={dataSource}

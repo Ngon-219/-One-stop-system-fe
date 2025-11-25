@@ -9,6 +9,9 @@ import { getUserPaginationReq } from "./interface/request/get_user";
 import { GetUserPaginationResponse } from "./interface/response/get_user_pagination";
 import { error } from "console";
 import { DeleteUserResponse } from "./interface/response/delete_user";
+import { majorsResponse } from "./interface/response/get_all_major";
+import { createNewUserReq } from "./interface/request/create_new_user";
+import { createNewUserRes } from "./interface/response/create_new_user";
 
 export const loginNotMfaApi = async (request: LoginRequest) => {
     const baseUrl = process.env.NEXT_PUBLIC_AUTH_SERVICE_URL;
@@ -188,5 +191,69 @@ export const deleteUserApi = async (user_id: string) => {
         return res;
     })
 
+    return response;
+}
+
+export const getAllMajor = async () => {
+    let baseUrl = process.env.NEXT_PUBLIC_AUTH_SERVICE_URL;
+    let url = baseUrl + `/api/v1/majors`;
+    let access_token = getCookie("huce_access_token");
+
+    let response = await axios.get(url, {
+        headers: {
+            "Authorization": `Bearer ${access_token}`
+        }
+    })
+    .then(res => {
+        let response: majorsResponse = {
+            majors: res.data.majors
+        }
+        return response;
+    })
+    .catch(error => {
+        console.error(error);
+        let response: majorsResponse = {
+            majors: []
+        } 
+        return response;
+    })
+    
+    return response;
+}
+
+export const createNewUserApi = async (req: createNewUserReq) => {
+    let baseUrl = process.env.NEXT_PUBLIC_AUTH_SERVICE_URL;
+    let url = baseUrl + "/api/v1/users";
+    let access_token = getCookie("huce_access_token");
+
+    let response = await axios.post(url, {
+        address: req.address,
+        cccd: req.cccd,
+        email: req.email,
+        first_name: req.first_name,
+        last_name: req.last_name,
+        major_ids: req.major_ids,
+        password: req.password,
+        phone_number: req.phone_number,
+        role: req.role,
+    }, {
+        headers: {
+            "Authorization": `Bearer ${access_token}`
+        }
+    })
+    .then(res => {
+        let response: createNewUserRes = {
+            statusCode: res.status,
+            message: "Vui lòng đợi đến khi có thông báo thành công!"
+        };
+        return response;
+    })
+    .catch(err => {
+        let response: createNewUserRes = {
+            statusCode: 500,
+            message: err.response.data
+        }
+        return response;
+    })
     return response;
 }
