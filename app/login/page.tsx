@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useRef, useEffect } from "react";
 import axios from "axios";
 import { loginNotMfaApi } from "../api/auth_service";
 import { LoginRequest } from "../api/interface/request/login";
@@ -12,11 +12,73 @@ const LoginPage = () => {
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [authenticatorCode, setAuthenticatorCode] = useState<string>("");
+  const [mfaDigits, setMfaDigits] = useState<string[]>(["", "", "", "", "", ""]);
   const [rememberMe, setRememberMe] = useState(false);
   const [mfaHidden,setMfaHidden] = useState(false);
+  const mfaInputRefs = useRef<(HTMLInputElement | null)[]>([]);
   
   const { login } = useAuth();
   const router = useRouter();
+
+  // Tự động focus vào ô đầu tiên khi MFA được hiển thị
+  useEffect(() => {
+    if (mfaHidden) {
+      setTimeout(() => {
+        mfaInputRefs.current[0]?.focus();
+      }, 100);
+    } else {
+      // Reset các ô khi ẩn MFA
+      setMfaDigits(["", "", "", "", "", ""]);
+      setAuthenticatorCode("");
+    }
+  }, [mfaHidden]);
+
+  const handleMfaDigitChange = (index: number, value: string) => {
+    // Chỉ cho phép số
+    if (value && !/^\d$/.test(value)) {
+      return;
+    }
+
+    const newDigits = [...mfaDigits];
+    newDigits[index] = value;
+    setMfaDigits(newDigits);
+    
+    // Cập nhật authenticatorCode từ mảng digits
+    const code = newDigits.join("");
+    setAuthenticatorCode(code);
+
+    // Tự động chuyển sang ô tiếp theo khi nhập số
+    if (value && index < 5) {
+      mfaInputRefs.current[index + 1]?.focus();
+    }
+  };
+
+  const handleMfaKeyDown = (index: number, e: React.KeyboardEvent<HTMLInputElement>) => {
+    // Xử lý backspace để quay lại ô trước
+    if (e.key === "Backspace" && !mfaDigits[index] && index > 0) {
+      mfaInputRefs.current[index - 1]?.focus();
+    }
+    
+    // Xử lý paste
+    if (e.key === "v" && (e.ctrlKey || e.metaKey)) {
+      e.preventDefault();
+      navigator.clipboard.readText().then((text) => {
+        const digits = text.replace(/\D/g, "").slice(0, 6).split("");
+        const newDigits = [...mfaDigits];
+        digits.forEach((digit, i) => {
+          if (index + i < 6) {
+            newDigits[index + i] = digit;
+          }
+        });
+        setMfaDigits(newDigits);
+        setAuthenticatorCode(newDigits.join(""));
+        
+        // Focus vào ô cuối cùng đã nhập
+        const lastIndex = Math.min(index + digits.length - 1, 5);
+        mfaInputRefs.current[lastIndex]?.focus();
+      });
+    }
+  };
 
   const handleLogin = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
@@ -130,14 +192,23 @@ const LoginPage = () => {
               >
                 Authenticator Code
               </label>
-              <input 
-                id="authenticatorCode"
-                type="authenticatorCode" 
-                placeholder="Enter your authenticator code"
-                value={authenticatorCode}
-                onChange={(e) => setAuthenticatorCode(e.target.value)}
-                className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all duration-200 bg-gray-50 hover:bg-white text-gray-800 placeholder-gray-400"
-              />
+              <div className="flex gap-2 justify-center">
+                {mfaDigits.map((digit, index) => (
+                  <input
+                    key={index}
+                    ref={(el) => {
+                      mfaInputRefs.current[index] = el;
+                    }}
+                    type="text"
+                    inputMode="numeric"
+                    maxLength={1}
+                    value={digit}
+                    onChange={(e) => handleMfaDigitChange(index, e.target.value)}
+                    onKeyDown={(e) => handleMfaKeyDown(index, e)}
+                    className="w-12 h-14 text-center text-xl font-semibold border-2 border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all duration-200 bg-gray-50 hover:bg-white text-gray-800"
+                  />
+                ))}
+              </div>
             </div>
 
             <div className="flex items-center justify-between text-sm">

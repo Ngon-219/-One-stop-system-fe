@@ -4,6 +4,7 @@ import { LoginResponse } from "./interface/response/login";
 import { parseAndFormatMessage } from "../utils/messageParser";
 import { ProfileResponse } from "./interface/response/profile";
 import { getCookie } from "./helper";
+import { LogoutResponse } from "./interface/response/logout";
 
 export const loginNotMfaApi = async (request: LoginRequest) => {
     const baseUrl = process.env.NEXT_PUBLIC_AUTH_SERVICE_URL;
@@ -83,6 +84,34 @@ export const profileApi = async () => {
     .catch(error => {
         console.log("Error login message: ", error);
         throw error;
+    })
+
+    return response;
+}
+
+export const logoutApi = async () => {
+    let accessToken = getCookie("huce_access_token");
+    let baseUrl = process.env.NEXT_PUBLIC_AUTH_SERVICE_URL;
+    let url = baseUrl + "/api/v1/auth/logout";
+
+    let response = axios.post(url, {}, {
+        headers: {
+            "Authorization": `Bearer ${accessToken}`
+        }
+    })
+    .then(response => {
+        let res: LogoutResponse = {
+            status_code: response.status,
+            message: "Log out successully"
+        };
+        return res;
+    })
+    .catch(err => {
+        let res: LogoutResponse = {
+            status_code: err.response.status,
+            message: err.response.data
+        };
+        return res;
     })
 
     return response;

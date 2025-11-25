@@ -2,8 +2,10 @@ import Image from "next/image";
 import ProfileImg from "../../../public/assets/images/profile.png";
 import { useAuth } from "@/app/context/AuthContext";
 import { useEffect, useState } from "react";
-import { profileApi } from "@/app/api/auth_service";
+import { logoutApi, profileApi } from "@/app/api/auth_service";
 import { ProfileResponse } from "@/app/api/interface/response/profile";
+import { LogoutResponse } from "@/app/api/interface/response/logout";
+import Swal from "sweetalert2";
 
 const navTabs = [
   { label: "Dịch vụ", icon: "📋", href: "/services", active: true },
@@ -14,8 +16,22 @@ export const NavBar = () => {
   let {logout, user} = useAuth();
   let [userResponse, setUserResponse] = useState<ProfileResponse>();
 
-  const handleLogout = () => {
-    logout();
+  const handleLogout = async () => {
+    let response: LogoutResponse = await logoutApi();
+    if (response.status_code == 200) {
+      Swal.fire({
+        title: "Logout Successful",
+        text: response.message,
+        icon: "success"
+      });
+      logout();
+    } else {
+      Swal.fire({
+        icon: "error",
+        title: "Logout Failed",
+        text: response.message + "!",
+      });
+    }
   }
 
   useEffect(() => {

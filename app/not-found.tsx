@@ -3,6 +3,9 @@
 import Link from "next/link";
 import { useEffect } from "react";
 import { useAuth } from "./context/AuthContext";
+import Swal from "sweetalert2";
+import { LogoutResponse } from "./api/interface/response/logout";
+import { logoutApi } from "./api/auth_service";
 
 export default function NotFound() {
   let {logout} = useAuth();
@@ -14,8 +17,22 @@ export default function NotFound() {
     };
   }, []);
 
-  const handleLogout = () => {
-    logout();
+  const handleLogout = async () => {
+    let response: LogoutResponse = await logoutApi();
+    if (response.status_code == 200) {
+      Swal.fire({
+        title: "Logout Successful",
+        text: response.message,
+        icon: "success"
+      });
+      logout();
+    } else {
+      Swal.fire({
+        icon: "error",
+        title: "Logout Failed",
+        text: response.message + "!",
+      });
+    }
   };
 
   return (

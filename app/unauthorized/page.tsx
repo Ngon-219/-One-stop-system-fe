@@ -3,6 +3,8 @@
 import { useAuth } from "../context/AuthContext";
 import { useRouter } from "next/navigation";
 import { useEffect } from "react";
+import { LogoutResponse } from "../api/interface/response/logout";
+import { logoutApi } from "../api/auth_service";
 
 export default function UnauthorizedPage() {
   const { user, logout } = useAuth();
@@ -12,8 +14,22 @@ export default function UnauthorizedPage() {
     router.push("/home");
   };
 
-  const handleLogout = () => {
-    logout();
+  const handleLogout = async () => {
+    let response: LogoutResponse = await logoutApi();
+    if (response.status_code == 200) {
+      Swal.fire({
+        title: "Logout Successful",
+        text: response.message,
+        icon: "success"
+      });
+      logout();
+    } else {
+      Swal.fire({
+        icon: "error",
+        title: "Logout Failed",
+        text: response.message + "!",
+      });
+    }
   };
 
   return (
