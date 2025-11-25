@@ -1,19 +1,71 @@
 "use client"
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, useRef } from "react";
 import { Button, Form, Input, Select, Tabs, Typography, Spin } from "antd";
 import { createNewUserApi, getAllMajor } from "@/app/api/auth_service";
 import { major } from "@/app/api/interface/response/get_all_major";
 import { createNewUserReq } from "@/app/api/interface/request/create_new_user";
 import { createNewUserRes } from "@/app/api/interface/response/create_new_user";
 import Swal from "sweetalert2";
+import { io, Socket } from "socket.io-client";
+import { useAuth } from "@/app/context/AuthContext";
+import { notification } from "antd";
 
-const roleOptions = ["Admin", "Manager", "Teacher", "Student"];
+interface RegisterResult {
+    status: string;
+    email: string;
+    student_code?: string;
+    message?: string;
+}
+
+const roleOptions = ["Admin", "Manager", "Student"];
+
+function extractDataFromRaw(rawData: any): RegisterResult | null {
+    console.log("🔍 extractDataFromRaw called with:", rawData);
+    console.log("🔍 rawData type:", typeof rawData);
+    
+    try {
+      const stringData = rawData.toString();
+      console.log("🔍 stringData:", stringData);
+      
+      const jsonMatch = stringData.match(/\[.*\]/);
+      console.log("🔍 jsonMatch:", jsonMatch);
+      
+      if (!jsonMatch) {
+        console.log("❌ No JSON match found");
+        return null;
+      }
+      
+      const outerArray = JSON.parse(jsonMatch[0]);
+      console.log("🔍 outerArray:", outerArray);
+
+      if (!outerArray[1]) {
+        console.log("❌ outerArray[1] is missing");
+        return null;
+      }
+      
+      const innerObject = JSON.parse(outerArray[1]);
+      console.log("🔍 innerObject:", innerObject);
+      console.log("✅ Status:", innerObject.status, "Email:", innerObject.email);
+      
+      return {
+        status: innerObject.status,
+        email: innerObject.email,
+      };
+  
+    } catch (error) {
+      console.error('❌ Parse error:', error);
+      return null;
+    }
+  }
 
 export default function CreateUserPage() {
     const [form] = Form.useForm();
     const [majors, setMajors] = useState<major[]>([]);
     const [loadingMajors, setLoadingMajors] = useState<boolean>(false);
+    const socketRef = useRef<Socket | null>(null);
+    const { user, isAuthenticated } = useAuth();
+    const [api, contextHolder] = notification.useNotification();
 
     const fetchMajors = async () => {
         setLoadingMajors(true);
@@ -34,6 +86,84 @@ export default function CreateUserPage() {
         fetchMajors();
     }, []);
 
+    useEffect(() => {
+        if (!isAuthenticated || !user) {
+            return;
+        }
+
+        const socketUrl = process.env.NEXT_PUBLIC_SOCKET_URL || "http://localhost:3003";
+        console.log("Connecting to socket server:", socketUrl);
+
+        const socket = io(socketUrl, {
+            transports: ["websocket", "polling"],
+            reconnection: true,
+            reconnectionDelay: 1000,
+            reconnectionAttempts: 5,
+        });
+
+        socketRef.current = socket;
+
+        socket.on("connect", () => {
+            console.log("Socket connected:", socket.id);
+            const roomId = `user:${user.user_id}`;
+            
+            socket.emit("join-room", {
+                room: roomId
+            });
+            
+            console.log("Joined room:", roomId);
+        });
+
+        socket.on("disconnect", (reason) => {
+            console.log("Socket disconnected:", reason);
+        });
+
+        socket.on("connect_error", (error) => {
+            console.error("Socket connection error:", error);
+        });
+
+        socket.on("event", (data: any) => {
+            console.log("Received event:", data);
+            console.log("Event data type:", typeof data);
+            console.log("Event data:", JSON.stringify(data));
+            
+            const formatted_data = extractDataFromRaw(data);
+            console.log("Formatted data:", formatted_data);
+            
+            if (formatted_data) {
+                const isSuccess = formatted_data.status === "success";
+                const message = isSuccess 
+                    ? `Người dùng ${formatted_data.email} đã được tạo thành công!`
+                    : `Tạo người dùng ${formatted_data.email} thất bại!`;
+                
+                if (isSuccess) {
+                    api.success({
+                        title: `Thông báo tạo người dùng`,
+                        description: message,
+                        placement: 'bottomRight',
+                    });
+                } else {
+                    api.error({
+                        title: `Thông báo tạo người dùng`,
+                        description: message,
+                        placement: 'bottomRight',
+                    });
+                }
+            } else {
+                console.log("formatted_data is null, cannot show notification");
+            }
+        });
+
+        return () => {
+            socket.off("connect");
+            socket.off("disconnect");
+            socket.off("connect_error");
+            socket.off("event");
+            socket.disconnect();
+            socketRef.current = null;
+        };
+    }, [isAuthenticated, user?.user_id]);
+
     const majorOptions = useMemo(
         () => majors.map((m) => ({ label: m.name, value: m.major_id })),
         [majors]
@@ -48,6 +178,8 @@ export default function CreateUserPage() {
                 text: response.message,
                 icon: "success"
               });
+            
+            form.resetFields();
         } else {
             Swal.fire({
                 icon: "error",
@@ -166,6 +298,7 @@ export default function CreateUserPage() {
 
     return (
         <div className="min-h-screen flex flex-col items-center py-8 px-4">
+            {contextHolder}
             <Typography.Title level={2}>Tạo người dùng</Typography.Title>
             <div className="w-full max-w-5xl bg-white p-6 rounded-2xl shadow">
                 <Tabs
