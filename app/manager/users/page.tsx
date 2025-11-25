@@ -3,7 +3,7 @@ import { getUserPagination } from "@/app/api/auth_service";
 import { getUserPaginationReq } from "@/app/api/interface/request/get_user";
 import { GetUserPaginationResponse, User } from "@/app/api/interface/response/get_user_pagination";
 import NavBar from "@/app/components/navbar"
-import { Table, Button, Tooltip, Input } from 'antd';
+import { Table, Button, Tooltip, Input, Select } from 'antd';
 import { useEffect, useState } from "react";
 import { EyeOutlined, EditOutlined, DeleteOutlined } from '@ant-design/icons';
 import Swal from "sweetalert2";
@@ -27,9 +27,15 @@ export default function UserManagePage() {
     let [total, setTotal] = useState<number>(0);
     let [searchValue, setSearchValue] = useState<string>("");
     let [loading, setLoading] = useState<boolean>(false);
+    let [selectedRole, setSelectedRole] = useState<string | undefined>(undefined);
 
-    const fetchUsers = async (params?: { limit?: number; page?: number; search?: string }) => {
-        const { limit = pageSize, page = currentPage, search = searchValue } = params ?? {};
+    const fetchUsers = async (params?: { limit?: number; page?: number; search?: string; role?: string }) => {
+        const {
+            limit = pageSize,
+            page = currentPage,
+            search = searchValue,
+            role = selectedRole,
+        } = params ?? {};
         let req: getUserPaginationReq = {
             limit: limit,
             page: page,
@@ -37,6 +43,10 @@ export default function UserManagePage() {
 
         if (search.trim()) {
             req.search = search.trim();
+        }
+
+        if (role && role !== "ALL") {
+            req.role = role;
         }
 
         setLoading(true);
@@ -176,20 +186,39 @@ export default function UserManagePage() {
     const handleSearch = (value: string) => {
         const sanitizedValue = value.trim();
         setSearchValue(value);
-        fetchUsers({ page: 1, search: sanitizedValue, limit: pageSize });
+        fetchUsers({ page: 1, search: sanitizedValue, limit: pageSize, role: selectedRole });
     };
 
     const handleSearchInputChange = (value: string) => {
         setSearchValue(value);
         if (!value.trim()) {
-            fetchUsers({ page: 1, search: "", limit: pageSize });
+            fetchUsers({ page: 1, search: "", limit: pageSize, role: selectedRole });
         }
+    };
+
+    const handleRoleChange = (value: string) => {
+        const roleValue = value === "ALL" ? undefined : value;
+        setSelectedRole(roleValue);
+        fetchUsers({ page: 1, search: searchValue.trim(), role: roleValue, limit: pageSize });
     };
 
     return (
         <div className="h-full w-full flex flex-col items-center justify-center">
             <NavBar />
-            <div className="w-[90vw] flex justify-end mb-4">
+            <div className="w-[90vw] flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between mb-4">
+                <Select
+                    placeholder="Lọc theo vai trò"
+                    className="w-full sm:w-60"
+                    value={selectedRole ?? "ALL"}
+                    onChange={handleRoleChange}
+                    options={[
+                        { value: "ALL", label: "Tất cả" },
+                        { value: "Student", label: "Student" },
+                        { value: "Admin", label: "Admin" },
+                        { value: "Manager", label: "Manager" },
+                        { value: "Teacher", label: "Teacher" },
+                    ]}
+                />
                 <Input.Search
                     allowClear
                     placeholder="Tìm kiếm theo tên, email hoặc MSV"
@@ -197,7 +226,7 @@ export default function UserManagePage() {
                     value={searchValue}
                     onChange={(e) => handleSearchInputChange(e.target.value)}
                     onSearch={handleSearch}
-                    className="max-w-md"
+                    className="max-w-md w-full sm:w-auto"
                 />
             </div>
             <Table 
@@ -209,7 +238,7 @@ export default function UserManagePage() {
                     pageSize: pageSize,
                     total: total,
                     onChange: (page: number, newPageSize: number) => {
-                        fetchUsers({ limit: newPageSize, page });
+                        fetchUsers({ limit: newPageSize, page, search: searchValue.trim(), role: selectedRole });
                     },
                 }}
                 className="w-[90vw] rounded-3xl shadow-xl"
