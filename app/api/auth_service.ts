@@ -331,3 +331,59 @@ export const uploadChunkApi = async (
         throw error;
     }
 }
+
+export const syncDBApi = async (historyFileUploadId: string) => {
+    let baseUrl = process.env.NEXT_PUBLIC_AUTH_SERVICE_URL;
+    let access_token = getCookie("huce_access_token");
+    let url = baseUrl + "/api/v1/users/bulk";
+
+    try {
+        const response = await axios.post(url, {
+            history_file_upload_id: historyFileUploadId,
+        }, {
+            headers: {
+                "Authorization": `Bearer ${access_token}`,
+                "Content-Type": "application/json",
+            },
+            skipLoadingInterceptor: true,
+        } as any);
+        return response.data;
+    } catch (error: any) {
+        console.error("Failed to sync DB:", error);
+        throw error;
+    }
+}
+
+export const getBulkCreateProgressApi = async (historyFileUploadId: string) => {
+    let baseUrl = process.env.NEXT_PUBLIC_AUTH_SERVICE_URL;
+    let access_token = getCookie("huce_access_token");
+    let url = baseUrl + `/api/v1/users/bulk/create-progress/${historyFileUploadId}`;
+
+    try {
+        const response = await axios.get(url, {
+            headers: {
+                "Authorization": `Bearer ${access_token}`,
+            },
+            skipLoadingInterceptor: true,
+        } as any);
+        
+        // Log để debug
+        console.log("Progress API response:", response.data);
+        
+        // Đảm bảo các field có giá trị mặc định nếu undefined
+        const data = response.data || {};
+        return {
+            history_file_upload_id: data.history_file_upload_id || historyFileUploadId,
+            status: data.status || "pending",
+            total: data.total ?? 0,
+            processed: data.processed ?? 0,
+            success: data.success ?? 0,
+            failed: data.failed ?? 0,
+            progress_percentage: data.progress_percentage,
+            message: data.message,
+        };
+    } catch (error: any) {
+        console.error("Failed to get bulk create progress:", error);
+        throw error;
+    }
+}

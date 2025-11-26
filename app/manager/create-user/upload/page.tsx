@@ -1,10 +1,11 @@
 "use client" 
-import { getUploadHistoryApi, uploadChunkApi } from "@/app/api/auth_service";
+import { getUploadHistoryApi, uploadChunkApi, syncDBApi, getBulkCreateProgressApi } from "@/app/api/auth_service";
 import { gettUploadHistoryReq } from "@/app/api/interface/request/upload_history";
 import { GetUploadHistoryResponse, FileUploadHistoryItem } from "@/app/api/interface/response/get_upload_history";
+import { BulkCreateProgressResponse } from "@/app/api/interface/response/bulk_create_progress";
 import NavBar from "@/app/components/navbar"
-import { Table, Button, Tooltip, Input, Select, Tag, Upload, Progress, message } from 'antd';
-import { useEffect, useState } from "react";
+import { Table, Button, Tooltip, Input, Select, Tag, Upload, Progress, message, Modal } from 'antd';
+import { useEffect, useState, useRef, useCallback, useMemo, memo } from "react";
 import { EyeOutlined, DownloadOutlined, UploadOutlined } from '@ant-design/icons';
 import { useRouter } from "next/navigation";
 import type { UploadFile } from 'antd';
@@ -29,6 +30,8 @@ export default function UploadPageManager() {
     const [uploading, setUploading] = useState<boolean>(false);
     const [uploadProgress, setUploadProgress] = useState<number>(0);
     const [uploadFileName, setUploadFileName] = useState<string>("");
+    const [syncProgressMap, setSyncProgressMap] = useState<Record<string, BulkCreateProgressResponse>>({});
+    const progressIntervalRefs = useRef<Record<string, NodeJS.Timeout>>({});
     const router = useRouter();
 
     const fetchUploadHistory = async (params?: { limit?: number; page?: number; search?: string; status?: string }) => {
@@ -71,6 +74,7 @@ export default function UploadPageManager() {
             setCurrentPage(response.page);
             setPageSize(response.pageSize);
             
+            // Batch update để tránh multiple re-renders
             setDataSource(formatted_uploads);
         } catch (err) {
             console.error("Failed to fetch upload history", err);
@@ -93,10 +97,119 @@ export default function UploadPageManager() {
         console.log("Download file:", item.fileName);
     };
 
-    const handleSyncDB = (item: TableUploadHistory) => {
-        console.log("Sync DB for:", item.fileUploadHistoryId);
-        fetchUploadHistory();
+    const handleSyncDB = async (item: TableUploadHistory) => {
+        const historyId = item.fileUploadHistoryId;
+        
+        try {
+            // Gọi API sync DB
+            await syncDBApi(historyId);
+            message.info("Đã bắt đầu đồng bộ DB...");
+        } catch (error: any) {
+            // Nếu status code là 409, có thể đang sync rồi, vẫn hiển thị progress
+            if (error.response?.status === 409) {
+                message.info("Đang kiểm tra tiến trình đồng bộ DB...");
+            } else {
+                console.error("Failed to sync DB:", error);
+                message.error(`Đồng bộ DB thất bại: ${error.response?.data?.message || error.message}`);
+                return; // Thoát nếu không phải 409
+            }
+        }
+        
+        // Bắt đầu poll progress (kể cả khi 409)
+        let lastUpdateTime = 0;
+        const UPDATE_THROTTLE = 1000; // Chỉ update UI mỗi 1 giây
+        let isPolling = true;
+            
+            const pollProgress = async () => {
+                if (!isPolling) return;
+                
+                try {
+                    const progress = await getBulkCreateProgressApi(historyId);
+                    const now = Date.now();
+                    
+                    // Throttle update để tránh update quá nhanh
+                    if (now - lastUpdateTime < UPDATE_THROTTLE && 
+                        progress.status !== "completed" && 
+                        progress.status !== "failed") {
+                        // Schedule next poll
+                        if (isPolling) {
+                            progressIntervalRefs.current[historyId] = setTimeout(pollProgress, 2000);
+                        }
+                        return;
+                    }
+                    lastUpdateTime = now;
+                    
+                    // Sử dụng requestAnimationFrame để update mượt mà và batch updates
+                    requestAnimationFrame(() => {
+                        setSyncProgressMap(prev => {
+                            const current = prev[historyId];
+                            // So sánh để chỉ update khi có thay đổi
+                            if (current && 
+                                current.processed === progress.processed && 
+                                current.status === progress.status &&
+                                current.success === progress.success &&
+                                current.failed === progress.failed &&
+                                current.progress_percentage === progress.progress_percentage) {
+                                return prev; // Không thay đổi, tránh re-render
+                            }
+                            // Tạo object mới chỉ khi cần thiết
+                            return {
+                                ...prev,
+                                [historyId]: { ...progress }
+                            };
+                        });
+                    });
+                    
+                    // Nếu đã hoàn thành hoặc thất bại, dừng polling
+                    if (progress.status === "completed" || progress.status === "failed") {
+                        isPolling = false;
+                        if (progressIntervalRefs.current[historyId]) {
+                            clearTimeout(progressIntervalRefs.current[historyId]);
+                            delete progressIntervalRefs.current[historyId];
+                        }
+                        
+                        if (progress.status === "completed") {
+                            message.success("Đồng bộ DB thành công!");
+                        } else {
+                            message.error("Đồng bộ DB thất bại!");
+                        }
+                        
+                        // Refresh danh sách sau 2 giây
+                        setTimeout(() => {
+                            setSyncProgressMap(prev => {
+                                const newMap = { ...prev };
+                                delete newMap[historyId];
+                                return newMap;
+                            });
+                            fetchUploadHistory();
+                        }, 2000);
+                    } else {
+                        // Schedule next poll
+                        if (isPolling) {
+                            progressIntervalRefs.current[historyId] = setTimeout(pollProgress, 3000);
+                        }
+                    }
+                } catch (error) {
+                    console.error("Failed to get progress:", error);
+                    // Retry sau 3 giây nếu có lỗi
+                    if (isPolling) {
+                        progressIntervalRefs.current[historyId] = setTimeout(pollProgress, 3000);
+                    }
+                }
+            };
+            
+            // Bắt đầu poll
+            pollProgress();
     };
+
+    // Cleanup intervals khi component unmount
+    useEffect(() => {
+        return () => {
+            Object.values(progressIntervalRefs.current).forEach(timeout => {
+                clearTimeout(timeout);
+            });
+        };
+    }, []);
 
     const handleSyncBlockchain = (item: TableUploadHistory) => {
         console.log("Sync Blockchain for:", item.fileUploadHistoryId);
@@ -113,6 +226,8 @@ export default function UploadPageManager() {
                 return "blue";
             case "sync_blockchain":
                 return "green";
+            case "failed":
+                return "red";
             default:
                 return "default";
         }
@@ -126,12 +241,54 @@ export default function UploadPageManager() {
                 return "Đồng bộ DB";
             case "sync_blockchain":
                 return "Đồng bộ Blockchain";
+            case "failed":
+                return "Thất bại";
             default:
                 return status;
         }
     };
 
-    const columns = [
+    // Component Progress riêng với memo để tránh re-render không cần thiết
+    const ProgressCell = memo(({ progress }: { progress: BulkCreateProgressResponse }) => {
+        const processed = progress.processed ?? 0;
+        const total = progress.total ?? 0;
+        const success = progress.success ?? 0;
+        const failed = progress.failed ?? 0;
+        
+        const progressPercent = useMemo(() => {
+            return progress.progress_percentage || 
+                (total > 0 ? Math.round((processed / total) * 100) : 0);
+        }, [progress.progress_percentage, processed, total]);
+
+        const formatText = useMemo(() => `${processed}/${total}`, [processed, total]);
+        const statusText = useMemo(() => `✓ ${success} | ✗ ${failed}`, [success, failed]);
+
+        return (
+            <div className="w-full min-w-[250px]">
+                <Progress 
+                    percent={progressPercent}
+                    status={progress.status === "failed" ? "exception" : "active"}
+                    format={() => formatText}
+                />
+                <div className="mt-1 text-xs text-gray-500 whitespace-nowrap">
+                    {statusText}
+                </div>
+            </div>
+        );
+    }, (prevProps, nextProps) => {
+        // Custom comparison để chỉ re-render khi thực sự thay đổi
+        return (
+            prevProps.progress.processed === nextProps.progress.processed &&
+            prevProps.progress.status === nextProps.progress.status &&
+            prevProps.progress.success === nextProps.progress.success &&
+            prevProps.progress.failed === nextProps.progress.failed &&
+            prevProps.progress.total === nextProps.progress.total
+        );
+    });
+    ProgressCell.displayName = 'ProgressCell';
+
+    // Memoize columns để tránh re-create mỗi lần render
+    const columns = useMemo(() => [
         {
             title: 'Tên file',
             dataIndex: 'fileName',
@@ -157,17 +314,30 @@ export default function UploadPageManager() {
             },
         },
         {
+            title: 'Tiến trình',
+            key: 'progress',
+            width: 300,
+            render: (_: any, record: TableUploadHistory) => {
+                const progress = syncProgressMap[record.fileUploadHistoryId];
+                if (!progress) {
+                    return null;
+                }
+                return <ProgressCell progress={progress} />;
+            },
+        },
+        {
             title: 'Hành động',
             key: 'action',
             render: (_: any, record: TableUploadHistory) => {
                 const isPending = record.status === "pending";
                 const isSyncDB = record.status === "sync_db";
                 const isSyncBlockchain = record.status === "sync_blockchain";
+                const isFailed = record.status === "failed";
                 
-                // Disable "Sync DB" khi đã sync DB hoặc đã sync blockchain
-                const isSyncDBDisabled = isSyncDB || isSyncBlockchain;
-                // Disable "Sync Blockchain" khi đã sync blockchain
-                const isSyncBlockchainDisabled = isSyncBlockchain;
+                // Disable "Sync DB" khi đã sync DB, đã sync blockchain, hoặc failed
+                const isSyncDBDisabled = isSyncDB || isSyncBlockchain || isFailed;
+                // Disable "Sync Blockchain" khi đã sync blockchain hoặc failed
+                const isSyncBlockchainDisabled = isSyncBlockchain || isFailed;
 
                 return (
                     <div className="flex gap-2">
@@ -195,7 +365,7 @@ export default function UploadPageManager() {
                 );
             },
         },
-    ];
+    ], [syncProgressMap]);
 
     const handleSearch = (value: string) => {
         const sanitizedValue = value.trim();
@@ -289,6 +459,7 @@ export default function UploadPageManager() {
                         { value: "pending", label: "Đang chờ" },
                         { value: "sync_db", label: "Đồng bộ DB" },
                         { value: "sync_blockchain", label: "Đồng bộ Blockchain" },
+                        { value: "failed", label: "Đồng bộ failed" },
                     ]}
                 />
             </div>
@@ -336,6 +507,7 @@ export default function UploadPageManager() {
                 }}
                 className="w-[90vw] rounded-3xl shadow-xl"
                 scroll={{ x: 1000 }}
+                rowKey="fileUploadHistoryId"
             />
         </div>
     )

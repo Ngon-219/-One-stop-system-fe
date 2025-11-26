@@ -73,6 +73,20 @@ const ensureInterceptors = () => {
       if (!(error.config as any)?.skipLoadingInterceptor) {
         decrement();
       }
+      
+      // Xử lý 401 Unauthorized - tự động logout và redirect về login
+      if (error.response?.status === 401) {
+        // Tránh xử lý 401 ở trang login để tránh loop
+        if (typeof window !== "undefined" && !window.location.pathname.includes("/login")) {
+          // Xóa cookies và redirect
+          const cookiesToRemove = ["huce_access_token", "huce_email", "huce_expires_in", "huce_role", "huce_user_id"];
+          cookiesToRemove.forEach(cookieName => {
+            document.cookie = `${cookieName}=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT`;
+          });
+          window.location.href = "/login";
+        }
+      }
+      
       return Promise.reject(error);
     }
   );
