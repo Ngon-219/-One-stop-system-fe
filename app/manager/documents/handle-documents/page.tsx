@@ -714,7 +714,7 @@ export default function HandleDocumentsPage() {
                     ) : (
                         <Alert
                             type="warning"
-                            message="Không có thông tin sinh viên."
+                            title="Không có thông tin sinh viên."
                             showIcon
                         />
                     )}
@@ -804,7 +804,7 @@ export default function HandleDocumentsPage() {
                             ) : (
                                 <Alert
                                     type="warning"
-                                    message="Không có thông tin sinh viên."
+                                    title="Không có thông tin sinh viên."
                                     showIcon
                                 />
                             )}
@@ -824,7 +824,7 @@ export default function HandleDocumentsPage() {
                         {!signDocument.pdf_schema?.template ? (
                             <Alert
                                 type="warning"
-                                message="Tài liệu chưa có PDF schema để hiển thị."
+                                title="Tài liệu chưa có PDF schema để hiển thị."
                                 showIcon
                             />
                         ) : (
@@ -840,7 +840,7 @@ export default function HandleDocumentsPage() {
                                     )}
                                     {signFormError && !signFormLoading ? (
                                         <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 z-10 bg-white/90">
-                                            <Alert type="error" message={signFormError} showIcon />
+                                            <Alert type="error" title={signFormError} showIcon />
                                             <Button
                                                 size="small"
                                                 onClick={() => setFormReloadKey((prev) => prev + 1)}

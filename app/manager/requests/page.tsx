@@ -315,7 +315,7 @@ export default function RequestsPage() {
                 {selectedRequest && (
                     <Form form={scheduleForm} onFinish={handleScheduleRequest} layout="vertical">
                         <Alert
-                            message="Thông tin yêu cầu"
+                            title="Thông tin yêu cầu"
                             description={
                                 <div className="mt-2">
                                     <p><strong>ID yêu cầu:</strong> {selectedRequest.request_id}</p>

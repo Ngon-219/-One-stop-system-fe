@@ -278,6 +278,39 @@ export const getPublicDocumentInfoApi = async (
     }
 };
 
+export const exportPrivateKeyApi = async (
+    authenticatorCode: string
+): Promise<{ message: string }> => {
+    const baseUrl = process.env.NEXT_PUBLIC_DOCUMENT_SERVICE_URL || "";
+    const url = new URL("/api/v1/documents/export-private-key", baseUrl);
+
+    const accessToken = getCookie("huce_access_token");
+
+    try {
+        const response = await axios.post(
+            url.toString(),
+            {
+                authenticator_code: authenticatorCode,
+            },
+            {
+                headers: {
+                    Authorization: `Bearer ${accessToken}`,
+                    "Content-Type": "application/json",
+                },
+            }
+        );
+        return response.data;
+    } catch (error: any) {
+        if (
+            error.response?.status === 401 &&
+            error.response?.data?.message === "Unauthorized"
+        ) {
+            handleUnauthorized();
+        }
+        throw error;
+    }
+};
+
 export const getCertificatesApi = async (
     documentTypeId?: string
 ): Promise<CertificateResponse[]> => {

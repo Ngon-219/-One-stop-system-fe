@@ -2,8 +2,10 @@
 
 import { useEffect, useState } from "react";
 import { profileApi, requestEnableMfaEmailApi, confirmEnableMfaApi, getMfaStatusApi } from "@/app/api/auth_service";
+import { exportPrivateKeyApi } from "@/app/api/document_service";
 import { ProfileResponse, ProfileMajor, ProfileDepartment } from "@/app/api/interface/response/profile";
-import { Card, Descriptions, Spin, Tag, Result, Button, Input, message, Alert } from "antd";
+import { Card, Descriptions, Spin, Tag, Result, Button, Input, message, Alert, Modal } from "antd";
+import Swal from "sweetalert2";
 import NavBar from "@/app/components/navbar";
 import ManagerNavBar from "../components/manager-navbar";
 import StudentNavBar from "../components/student-navbar";
@@ -24,6 +26,9 @@ export default function ProfilePage() {
     const [messageApi, contextHolder] = message.useMessage();
     const {user} = useAuth();
     const router = useRouter();
+    const [exportKeyMfaCode, setExportKeyMfaCode] = useState<string>("");
+    const [exportingKey, setExportingKey] = useState<boolean>(false);
+    const [isExportKeyModalVisible, setIsExportKeyModalVisible] = useState<boolean>(false);
 
     useEffect(() => {
         const fetchProfile = async () => {
@@ -150,6 +155,47 @@ export default function ProfilePage() {
         }
     };
 
+    const handleExportPrivateKey = async () => {
+        if (!exportKeyMfaCode.trim()) {
+            Swal.fire({
+                icon: "warning",
+                title: "Cảnh báo",
+                text: "Vui lòng nhập mã xác thực MFA!",
+            });
+            return;
+        }
+
+        if (!mfaEnabled) {
+            Swal.fire({
+                icon: "warning",
+                title: "MFA chưa được kích hoạt",
+                text: "Bạn cần kích hoạt MFA để xuất khóa riêng tư.",
+            });
+            return;
+        }
+
+        setExportingKey(true);
+        try {
+            const response = await exportPrivateKeyApi(exportKeyMfaCode.trim());
+            Swal.fire({
+                icon: "success",
+                title: "Thành công",
+                text: response.message || "Khóa riêng tư đã được gửi đến email của bạn!",
+            });
+            setIsExportKeyModalVisible(false);
+            setExportKeyMfaCode("");
+        } catch (error: any) {
+            console.error("Failed to export private key:", error);
+            Swal.fire({
+                icon: "error",
+                title: "Lỗi",
+                text: error.response?.data?.message || "Không thể xuất khóa riêng tư!",
+            });
+        } finally {
+            setExportingKey(false);
+        }
+    };
+
     return (
         <>
             {contextHolder}
@@ -214,28 +260,49 @@ export default function ProfilePage() {
 
                         <Card title="Ví blockchain" className="rounded-3xl shadow-sm mb-2.5">
                             {profile.wallet ? (
-                                <Descriptions bordered column={2}>
-                                    <Descriptions.Item label="Địa chỉ">
-                                        {profile.wallet.address}
-                                    </Descriptions.Item>
-                                    <Descriptions.Item label="Chuỗi">
-                                        {profile.wallet.chain_type}
-                                    </Descriptions.Item>
-                                    <Descriptions.Item label="Trạng thái">
-                                        {profile.wallet.status}
-                                    </Descriptions.Item>
-                                    <Descriptions.Item label="Network ID">
-                                        {profile.wallet.network_id}
-                                    </Descriptions.Item>
-                                    <Descriptions.Item label="Public key">
-                                        {profile.wallet.public_key}
-                                    </Descriptions.Item>
-                                    <Descriptions.Item label="Lần dùng cuối">
-                                        {profile.wallet.last_used_at
-                                            ? new Date(profile.wallet.last_used_at).toLocaleString("vi-VN")
-                                            : "Chưa có"}
-                                    </Descriptions.Item>
-                                </Descriptions>
+                                <>
+                                    <Descriptions bordered column={2}>
+                                        <Descriptions.Item label="Địa chỉ">
+                                            {profile.wallet.address}
+                                        </Descriptions.Item>
+                                        <Descriptions.Item label="Chuỗi">
+                                            {profile.wallet.chain_type}
+                                        </Descriptions.Item>
+                                        <Descriptions.Item label="Trạng thái">
+                                            {profile.wallet.status}
+                                        </Descriptions.Item>
+                                        <Descriptions.Item label="Network ID">
+                                            {profile.wallet.network_id}
+                                        </Descriptions.Item>
+                                        <Descriptions.Item label="Public key">
+                                            {profile.wallet.public_key}
+                                        </Descriptions.Item>
+                                        <Descriptions.Item label="Lần dùng cuối">
+                                            {profile.wallet.last_used_at
+                                                ? new Date(profile.wallet.last_used_at).toLocaleString("vi-VN")
+                                                : "Chưa có"}
+                                        </Descriptions.Item>
+                                    </Descriptions>
+                                    <div className="mt-4 flex justify-end">
+                                        <Button
+                                            type="primary"
+                                            danger
+                                            onClick={() => setIsExportKeyModalVisible(true)}
+                                            disabled={!mfaEnabled}
+                                        >
+                                            Xuất khóa riêng tư
+                                        </Button>
+                                    </div>
+                                    {!mfaEnabled && (
+                                        <Alert
+                                            title="Cần kích hoạt MFA"
+                                            description="Bạn cần kích hoạt MFA để có thể xuất khóa riêng tư."
+                                            type="warning"
+                                            showIcon
+                                            className="mt-4"
+                                        />
+                                    )}
+                                </>
                             ) : (
                                 <Result status="info" title="Chưa có ví blockchain" />
                             )}
@@ -250,7 +317,7 @@ export default function ProfilePage() {
                                 </div>
                             ) : mfaEnabled === true ? (
                                 <Alert
-                                    message="MFA đã được kích hoạt"
+                                    title="MFA đã được kích hoạt"
                                     description="Xác thực đa yếu tố (MFA) đã được bật cho tài khoản của bạn. Bạn có thể sử dụng ứng dụng Authenticator để xác thực khi đăng nhập hoặc thực hiện các tác vụ quan trọng."
                                     type="success"
                                     showIcon
@@ -319,6 +386,62 @@ export default function ProfilePage() {
                 )}
                 </div>
             </div>
+
+            {/* Export Private Key Modal */}
+            <Modal
+                title="Xuất khóa riêng tư"
+                open={isExportKeyModalVisible}
+                onCancel={() => {
+                    setIsExportKeyModalVisible(false);
+                    setExportKeyMfaCode("");
+                }}
+                footer={null}
+                width={500}
+            >
+                <Alert
+                    title="Cảnh báo bảo mật"
+                    description="Khóa riêng tư cho phép truy cập hoàn toàn vào ví của bạn. Không bao giờ chia sẻ với bất kỳ ai. Khóa riêng tư sẽ được gửi đến email của bạn."
+                    type="warning"
+                    showIcon
+                    className="mb-4"
+                />
+                <div className="space-y-4">
+                    <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-2">
+                            Mã xác thực MFA (6 chữ số)
+                        </label>
+                        <Input
+                            type="text"
+                            maxLength={6}
+                            placeholder="Nhập mã MFA"
+                            value={exportKeyMfaCode}
+                            onChange={(e) => {
+                                const value = e.target.value.replace(/\D/g, "");
+                                setExportKeyMfaCode(value);
+                            }}
+                            size="large"
+                        />
+                    </div>
+                    <div className="flex justify-end gap-2">
+                        <Button
+                            onClick={() => {
+                                setIsExportKeyModalVisible(false);
+                                setExportKeyMfaCode("");
+                            }}
+                        >
+                            Hủy
+                        </Button>
+                        <Button
+                            type="primary"
+                            danger
+                            onClick={handleExportPrivateKey}
+                            loading={exportingKey}
+                        >
+                            Xuất khóa riêng tư
+                        </Button>
+                    </div>
+                </div>
+            </Modal>
         </>
     );
 }
