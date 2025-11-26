@@ -10,6 +10,7 @@ import Swal from "sweetalert2";
 import { io, Socket } from "socket.io-client";
 import { useAuth } from "@/app/context/AuthContext";
 import { notification } from "antd";
+import { useRouter } from "next/navigation";
 
 interface RegisterResult {
     status: string;
@@ -21,32 +22,32 @@ interface RegisterResult {
 const roleOptions = ["Admin", "Manager", "Student"];
 
 function extractDataFromRaw(rawData: any): RegisterResult | null {
-    console.log("🔍 extractDataFromRaw called with:", rawData);
-    console.log("🔍 rawData type:", typeof rawData);
+    console.log("extractDataFromRaw called with:", rawData);
+    console.log("rawData type:", typeof rawData);
     
     try {
       const stringData = rawData.toString();
-      console.log("🔍 stringData:", stringData);
+      console.log("stringData:", stringData);
       
       const jsonMatch = stringData.match(/\[.*\]/);
-      console.log("🔍 jsonMatch:", jsonMatch);
+      console.log("jsonMatch:", jsonMatch);
       
       if (!jsonMatch) {
-        console.log("❌ No JSON match found");
+        console.log("No JSON match found");
         return null;
       }
       
       const outerArray = JSON.parse(jsonMatch[0]);
-      console.log("🔍 outerArray:", outerArray);
+      console.log("outerArray:", outerArray);
 
       if (!outerArray[1]) {
-        console.log("❌ outerArray[1] is missing");
+        console.log("outerArray[1] is missing");
         return null;
       }
       
       const innerObject = JSON.parse(outerArray[1]);
-      console.log("🔍 innerObject:", innerObject);
-      console.log("✅ Status:", innerObject.status, "Email:", innerObject.email);
+      console.log("innerObject:", innerObject);
+      console.log("Status:", innerObject.status, "Email:", innerObject.email);
       
       return {
         status: innerObject.status,
@@ -54,7 +55,7 @@ function extractDataFromRaw(rawData: any): RegisterResult | null {
       };
   
     } catch (error) {
-      console.error('❌ Parse error:', error);
+      console.error('Parse error:', error);
       return null;
     }
   }
@@ -66,6 +67,7 @@ export default function CreateUserPage() {
     const socketRef = useRef<Socket | null>(null);
     const { user, isAuthenticated } = useAuth();
     const [api, contextHolder] = notification.useNotification();
+    const router = useRouter();
 
     const fetchMajors = async () => {
         setLoadingMajors(true);
@@ -290,11 +292,11 @@ export default function CreateUserPage() {
         </Form>
     );
 
-    const uploadPlaceholder = (
-        <div className="border border-dashed border-gray-300 rounded-lg p-8 text-center text-gray-500">
-            Upload placeholder
-        </div>
-    );
+    const handleTabChange = (key: string) => {
+        if (key === "upload") {
+            router.push("/manager/create-user/upload");
+        }
+    };
 
     return (
         <div className="min-h-screen flex flex-col items-center py-8 px-4">
@@ -303,6 +305,7 @@ export default function CreateUserPage() {
             <div className="w-full max-w-5xl bg-white p-6 rounded-2xl shadow">
                 <Tabs
                     defaultActiveKey="manual"
+                    onChange={handleTabChange}
                     items={[
                         {
                             key: "manual",
@@ -318,7 +321,6 @@ export default function CreateUserPage() {
                         {
                             key: "upload",
                             label: "Upload",
-                            children: uploadPlaceholder,
                         },
                     ]}
                 />

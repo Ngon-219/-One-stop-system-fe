@@ -12,6 +12,8 @@ import { DeleteUserResponse } from "./interface/response/delete_user";
 import { majorsResponse } from "./interface/response/get_all_major";
 import { createNewUserReq } from "./interface/request/create_new_user";
 import { createNewUserRes } from "./interface/response/create_new_user";
+import { gettUploadHistoryReq } from "./interface/request/upload_history";
+import { GetUploadHistoryResponse } from "./interface/response/get_upload_history";
 
 export const loginNotMfaApi = async (request: LoginRequest) => {
     const baseUrl = process.env.NEXT_PUBLIC_AUTH_SERVICE_URL;
@@ -255,5 +257,45 @@ export const createNewUserApi = async (req: createNewUserReq) => {
         }
         return response;
     })
+    return response;
+}
+
+export const getUploadHistoryApi = async (req: gettUploadHistoryReq) => {
+    let baseUrl = process.env.NEXT_PUBLIC_AUTH_SERVICE_URL;
+    let access_token = getCookie("huce_access_token");
+    let user_id = getCookie("huce_user_id");
+    let url = baseUrl + `/api/v1/upload/history?page=${req.page}&pageSize=${req.limit}&userId=${user_id}`;
+    
+    if (req.status) {
+        url += `&status=${req.status}`;
+    }
+
+    let response = await axios.get(url, {
+        headers: {
+            "Authorization": `Bearer ${access_token}`
+        }
+    })
+    .then(response => {
+        let res: GetUploadHistoryResponse = {
+            fileUploads: response.data.fileUploads,
+            total: response.data.total,
+            page: response.data.page,
+            pageSize: response.data.pageSize,
+            totalPages: response.data.totalPages,
+        };
+      return res;  
+    })
+    .catch(err => {
+        console.error("Failed to get upload history api: ", err);
+        let res: GetUploadHistoryResponse = {
+            fileUploads: [],
+            total: 0,
+            page: 0,
+            pageSize: 0,
+            totalPages: 0,
+        }
+        return res;
+    })
+
     return response;
 }
