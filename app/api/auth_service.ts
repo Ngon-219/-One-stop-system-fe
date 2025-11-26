@@ -17,6 +17,7 @@ import { GetUploadHistoryResponse } from "./interface/response/get_upload_histor
 import { GetUserDetailResponse } from "./interface/response/get_user_detail";
 import { UpdateUserRequest } from "./interface/request/update_user";
 import { UpdateUserResponse } from "./interface/response/update_user";
+import { GetDocumentTypesResponse, DocumentType } from "./interface/response/get_document_types";
 
 export const loginNotMfaApi = async (request: LoginRequest) => {
     const baseUrl = process.env.NEXT_PUBLIC_AUTH_SERVICE_URL;
@@ -483,6 +484,26 @@ export const updateUserApi = async (userId: string, request: UpdateUserRequest):
         return response.data;
     } catch (error: any) {
         console.error("Failed to update user:", error);
+        throw error;
+    }
+}
+
+export const getDocumentTypesApi = async (): Promise<GetDocumentTypesResponse> => {
+    let baseUrl = process.env.NEXT_PUBLIC_AUTH_SERVICE_URL;
+    let url = baseUrl + `/api/v1/documents/types`;
+    let access_token = getCookie("huce_access_token");
+    
+    try {
+        const response = await axios.get(url, {
+            headers: {
+                "Authorization": `Bearer ${access_token}`
+            }
+        });
+        return {
+            documentTypes: response.data
+        };
+    } catch (error: any) {
+        console.error("Failed to get document types:", error);
         throw error;
     }
 }
