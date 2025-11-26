@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { useEffect } from "react";
 import { LogoutResponse } from "../api/interface/response/logout";
 import { logoutApi } from "../api/auth_service";
+import Swal from "sweetalert2";
 
 export default function UnauthorizedPage() {
   const { user, logout } = useAuth();

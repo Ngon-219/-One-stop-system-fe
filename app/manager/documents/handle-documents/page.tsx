@@ -4,10 +4,11 @@ import { useEffect, useRef, useState } from "react";
 import NavBar from "@/app/components/navbar";
 import ManagerNavBar from "@/app/components/manager-navbar";
 import { Table, Tag, Button, Tooltip, Modal, Descriptions, Spin, Select, Empty, Alert, Input } from "antd";
-import { EyeOutlined, ReloadOutlined, FileDoneOutlined } from "@ant-design/icons";
+import { EyeOutlined, ReloadOutlined, FileDoneOutlined, StopOutlined } from "@ant-design/icons";
 import Swal from "sweetalert2";
-import { approveDocumentApi, getDocumentByIdApi, getDocumentsApi, rejectDocumentApi } from "@/app/api/document_service";
-import { getUserDetailApi } from "@/app/api/auth_service";
+import { approveDocumentApi, getDocumentByIdApi, getDocumentsApi, rejectDocumentApi, revokeDocumentApi } from "@/app/api/document_service";
+import { getUserDetailApi, getMfaStatusApi } from "@/app/api/auth_service";
+import { useRouter } from "next/navigation";
 import { DocumentResponse, DocumentStatus, PdfSchemaPayload } from "@/app/api/interface/response/get_documents";
 import { GetUserDetailResponse } from "@/app/api/interface/response/get_user_detail";
 import { Form as PdfForm } from "@pdfme/ui";
@@ -183,49 +184,79 @@ export default function HandleDocumentsPage() {
         </Tag>
     );
 
-    const handleSign = async (record: DocumentResponse) => {
-        setSignModalVisible(true);
-        setSignLoading(true);
-        setSignDocument(null);
-        setSignUserDetail(null);
-        setSignUserDetailLoading(true);
-
+    const checkMfaAndProceed = async (callback: () => void | Promise<void>) => {
         try {
-            const detail = await getDocumentByIdApi(record.document_id);
-            originalSchemaRef.current = detail.pdf_schema
-                ? JSON.parse(JSON.stringify(detail.pdf_schema))
-                : null;
-            formInputsRef.current = detail.pdf_schema?.inputs
-                ? JSON.parse(JSON.stringify(detail.pdf_schema.inputs))
-                : [];
-            setSignDocument(detail);
-
-            try {
-                const userDetail = await getUserDetailApi(record.user_id);
-                setSignUserDetail(userDetail);
-            } catch (userError: any) {
-                console.error("Failed to fetch user detail:", userError);
+            const mfaStatus = await getMfaStatusApi();
+            if (!mfaStatus.isEnabled) {
                 Swal.fire({
-                    icon: "error",
-                    title: "Lỗi",
-                    text: userError.response?.data?.message || "Không thể tải thông tin người dùng!",
+                    icon: "warning",
+                    title: "MFA chưa được kích hoạt",
+                    text: "Bạn cần kích hoạt MFA để thực hiện tác vụ này. Sẽ chuyển đến trang cài đặt MFA.",
+                    confirmButtonText: "Đi đến cài đặt",
+                }).then(() => {
+                    router.push("/profile");
                 });
-            } finally {
-                setSignUserDetailLoading(false);
+                return false;
             }
+            await callback();
+            return true;
         } catch (error: any) {
-            console.error("Failed to get document detail:", error);
+            console.error("Failed to check MFA status:", error);
             Swal.fire({
                 icon: "error",
                 title: "Lỗi",
-                text: error.response?.data?.message || "Không thể tải chi tiết tài liệu!",
-            }).then(() => {
-                setSignModalVisible(false);
+                text: "Không thể kiểm tra trạng thái MFA. Vui lòng thử lại.",
             });
-            setSignUserDetailLoading(false);
-        } finally {
-            setSignLoading(false);
+            return false;
         }
+    };
+
+    const handleSign = async (record: DocumentResponse) => {
+        const proceed = await checkMfaAndProceed(async () => {
+            setSignModalVisible(true);
+            setSignLoading(true);
+            setSignDocument(null);
+            setSignUserDetail(null);
+            setSignUserDetailLoading(true);
+
+            try {
+                const detail = await getDocumentByIdApi(record.document_id);
+                originalSchemaRef.current = detail.pdf_schema
+                    ? JSON.parse(JSON.stringify(detail.pdf_schema))
+                    : null;
+                formInputsRef.current = detail.pdf_schema?.inputs
+                    ? JSON.parse(JSON.stringify(detail.pdf_schema.inputs))
+                    : [];
+                setSignDocument(detail);
+
+                try {
+                    const userDetail = await getUserDetailApi(record.user_id);
+                    setSignUserDetail(userDetail);
+                } catch (userError: any) {
+                    console.error("Failed to fetch user detail:", userError);
+                    Swal.fire({
+                        icon: "error",
+                        title: "Lỗi",
+                        text: userError.response?.data?.message || "Không thể tải thông tin người dùng!",
+                    });
+                } finally {
+                    setSignUserDetailLoading(false);
+                }
+            } catch (error: any) {
+                console.error("Failed to get document detail:", error);
+                Swal.fire({
+                    icon: "error",
+                    title: "Lỗi",
+                    text: error.response?.data?.message || "Không thể tải chi tiết tài liệu!",
+                }).then(() => {
+                    setSignModalVisible(false);
+                });
+                setSignUserDetailLoading(false);
+            } finally {
+                setSignLoading(false);
+            }
+        });
+        if (!proceed) return;
     };
 
     const closeSignModal = () => {
@@ -353,6 +384,47 @@ export default function HandleDocumentsPage() {
         }
     };
 
+    const handleRevokeDocument = async (record: DocumentResponse) => {
+        // Check MFA first
+        const mfaCheck = await checkMfaAndProceed(async () => {
+            const result = await Swal.fire({
+                title: "Xác nhận thu hồi",
+                text: "Bạn có chắc chắn muốn thu hồi tài liệu này? Hành động này không thể hoàn tác.",
+                icon: "warning",
+                showCancelButton: true,
+                confirmButtonColor: "#d33",
+                cancelButtonColor: "#3085d6",
+                confirmButtonText: "Thu hồi",
+                cancelButtonText: "Hủy",
+            });
+
+            if (!result.isConfirmed) {
+                return;
+            }
+
+            setLoading(true);
+            try {
+                await revokeDocumentApi(record.document_id);
+                Swal.fire({
+                    icon: "success",
+                    title: "Thu hồi thành công",
+                    text: "Tài liệu đã được thu hồi và cập nhật trạng thái revoked.",
+                });
+                await fetchDocuments(page, pageSize);
+            } catch (error: any) {
+                console.error("Failed to revoke document:", error);
+                Swal.fire({
+                    icon: "error",
+                    title: "Lỗi",
+                    text: error.response?.data?.message || "Không thể thu hồi tài liệu!",
+                });
+            } finally {
+                setLoading(false);
+            }
+        });
+        if (!mfaCheck) return;
+    };
+
     useEffect(() => {
         if (!signModalVisible) {
             return;
@@ -469,6 +541,15 @@ export default function HandleDocumentsPage() {
                             onClick={() => handleSign(record)}
                         />
                     </Tooltip>
+                    {record.status === "minted" && (
+                        <Tooltip title="Thu hồi tài liệu">
+                            <Button
+                                type="text"
+                                icon={<StopOutlined style={{ color: "#ff4d4f" }} />}
+                                onClick={() => handleRevokeDocument(record)}
+                            />
+                        </Tooltip>
+                    )}
                 </div>
             ),
         },

@@ -28,6 +28,11 @@ import { ResetPasswordRequest } from "./interface/request/reset_password";
 import { ResetPasswordResponse } from "./interface/response/reset_password";
 import { ChangePasswordRequest } from "./interface/request/change_password";
 import { ChangePasswordResponse } from "./interface/response/change_password";
+import { MfaStatusResponse } from "./interface/response/mfa_status";
+import { CreateRequestRequest } from "./interface/request/create_request";
+import { RequestResponse, RequestListResponse } from "./interface/response/request";
+import { ScheduleRequestRequest } from "./interface/request/schedule_request";
+import { ScheduleRequestResponse } from "./interface/response/schedule_request";
 
 export const loginNotMfaApi = async (request: LoginRequest) => {
     const baseUrl = process.env.NEXT_PUBLIC_AUTH_SERVICE_URL;
@@ -363,6 +368,112 @@ export const confirmEnableMfaApi = async (otpCode: string) => {
         return response.data;
     } catch (error: any) {
         console.error("Failed to confirm MFA enable:", error);
+        throw error;
+    }
+}
+
+export const getMfaStatusApi = async (): Promise<MfaStatusResponse> => {
+    const access_token = getCookie("huce_access_token");
+    const baseUrl = process.env.NEXT_PUBLIC_AUTH_SERVICE_URL;
+    const url = `${baseUrl}/api/v1/user-mfa/status`;
+
+    try {
+        const response = await axios.get(url, {
+            headers: {
+                "Authorization": `Bearer ${access_token}`,
+            }
+        });
+        return response.data;
+    } catch (error: any) {
+        console.error("Failed to get MFA status:", error);
+        throw error;
+    }
+}
+
+export const createRequestApi = async (payload: CreateRequestRequest): Promise<RequestResponse> => {
+    const access_token = getCookie("huce_access_token");
+    const baseUrl = process.env.NEXT_PUBLIC_AUTH_SERVICE_URL;
+    const url = `${baseUrl}/api/v1/requests`;
+
+    try {
+        const response = await axios.post(url, payload, {
+            headers: {
+                "Authorization": `Bearer ${access_token}`,
+                "Content-Type": "application/json",
+            }
+        });
+        return response.data;
+    } catch (error: any) {
+        console.error("Failed to create request:", error);
+        if (error.response?.status === 401 && error.response?.data?.message === "Unauthorized") {
+            // Handle unauthorized
+        }
+        throw error;
+    }
+}
+
+export const getMyRequestsApi = async (): Promise<RequestListResponse> => {
+    const access_token = getCookie("huce_access_token");
+    const baseUrl = process.env.NEXT_PUBLIC_AUTH_SERVICE_URL;
+    const url = `${baseUrl}/api/v1/requests`;
+
+    try {
+        const response = await axios.get(url, {
+            headers: {
+                "Authorization": `Bearer ${access_token}`,
+            }
+        });
+        return response.data;
+    } catch (error: any) {
+        console.error("Failed to get my requests:", error);
+        throw error;
+    }
+}
+
+export const getAllRequestsApi = async (
+    page?: number,
+    pageSize?: number,
+    status?: string
+): Promise<RequestListResponse> => {
+    const access_token = getCookie("huce_access_token");
+    const baseUrl = process.env.NEXT_PUBLIC_AUTH_SERVICE_URL;
+    const url = new URL(`${baseUrl}/api/v1/requests/all`);
+
+    if (page) url.searchParams.set("page", page.toString());
+    if (pageSize) url.searchParams.set("page_size", pageSize.toString());
+    if (status) url.searchParams.set("status", status);
+
+    try {
+        const response = await axios.get(url.toString(), {
+            headers: {
+                "Authorization": `Bearer ${access_token}`,
+            }
+        });
+        return response.data;
+    } catch (error: any) {
+        console.error("Failed to get all requests:", error);
+        throw error;
+    }
+}
+
+export const scheduleRequestApi = async (
+    requestId: string,
+    payload: ScheduleRequestRequest
+): Promise<ScheduleRequestResponse> => {
+    const access_token = getCookie("huce_access_token");
+    const baseUrl = process.env.NEXT_PUBLIC_AUTH_SERVICE_URL;
+    const url = `${baseUrl}/api/v1/requests/${requestId}/schedule`;
+
+    try {
+        const response = await axios.post(url, payload, {
+            headers: {
+                "Authorization": `Bearer ${access_token}`,
+                "Content-Type": "application/json",
+            }
+        });
+        return response.data;
+    } catch (error: any) {
+        console.error("Failed to schedule request:", error);
         throw error;
     }
 }

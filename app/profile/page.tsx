@@ -1,11 +1,12 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { profileApi, requestEnableMfaEmailApi, confirmEnableMfaApi } from "@/app/api/auth_service";
+import { profileApi, requestEnableMfaEmailApi, confirmEnableMfaApi, getMfaStatusApi } from "@/app/api/auth_service";
 import { ProfileResponse, ProfileMajor, ProfileDepartment } from "@/app/api/interface/response/profile";
-import { Card, Descriptions, Spin, Tag, Result, Button, Input, message } from "antd";
+import { Card, Descriptions, Spin, Tag, Result, Button, Input, message, Alert } from "antd";
 import NavBar from "@/app/components/navbar";
 import ManagerNavBar from "../components/manager-navbar";
+import StudentNavBar from "../components/student-navbar";
 import QRCode from "qrcode";
 import { useAuth } from "../context/AuthContext";
 import { useRouter } from "next/navigation";
@@ -18,6 +19,8 @@ export default function ProfilePage() {
     const [sendingMfa, setSendingMfa] = useState(false);
     const [verifyingMfa, setVerifyingMfa] = useState(false);
     const [mfaQr, setMfaQr] = useState<string | null>(null);
+    const [mfaEnabled, setMfaEnabled] = useState<boolean | null>(null);
+    const [checkingMfa, setCheckingMfa] = useState<boolean>(false);
     const [messageApi, contextHolder] = message.useMessage();
     const {user} = useAuth();
     const router = useRouter();
@@ -37,7 +40,22 @@ export default function ProfilePage() {
             }
         };
 
+        const checkMfaStatus = async () => {
+            setCheckingMfa(true);
+            try {
+                const mfaStatus = await getMfaStatusApi();
+                setMfaEnabled(mfaStatus.isEnabled);
+            } catch (err: any) {
+                console.error("Failed to check MFA status:", err);
+                // Nếu lỗi, mặc định là chưa enable để hiển thị UI enable
+                setMfaEnabled(false);
+            } finally {
+                setCheckingMfa(false);
+            }
+        };
+
         fetchProfile();
+        checkMfaStatus();
     }, []);
 
     const renderStatusTag = (label: string, value: boolean | string | number) => {
@@ -123,6 +141,8 @@ export default function ProfilePage() {
             const qrPayload = await buildQrCodeDataUrl(res?.qrCode);
             setMfaQr(qrPayload);
             messageApi.success(res?.message || "Kích hoạt MFA thành công.");
+            // Update MFA status after successful enable
+            setMfaEnabled(true);
         } catch (err: any) {
             messageApi.error(err.response?.data?.message || "Không thể xác minh OTP.");
         } finally {
@@ -135,7 +155,8 @@ export default function ProfilePage() {
             {contextHolder}
             <div className="min-h-screen bg-gray-50 space-y-2.5">
                 <NavBar />
-                {user?.role === "admin" || user?.role === "manager" && <ManagerNavBar />}
+                {user?.role === "admin" || user?.role === "manager" ? <ManagerNavBar /> : null}
+                {user?.role === "student" && <StudentNavBar />}
                 <div className="w-[90vw] mx-auto py-8 space-y-6">
                 {loading ? (
                     <div className="flex justify-center py-20">
@@ -223,37 +244,53 @@ export default function ProfilePage() {
                         <br />
 
                         <Card title="Bật xác thực đa yếu tố (MFA)" className="rounded-3xl shadow-sm">
-                            <p className="text-sm text-gray-600 mb-4">
-                                Nhấn &quot;Gửi OTP&quot; để nhận mã qua email, sau đó nhập OTP để kích hoạt MFA.
-                            </p>
-                            <div className="flex gap-3 flex-wrap">
-                                <Button onClick={handleSendMfaEmail} loading={sendingMfa}>
-                                    Gửi OTP
-                                </Button>
-                                <div className="flex gap-2 flex-wrap items-center">
-                                    <Input
-                                        placeholder="Nhập mã OTP"
-                                        value={mfaOtp}
-                                        onChange={(e) => setMfaOtp(e.target.value)}
-                                        maxLength={10}
-                                        style={{ width: 200 }}
-                                    />
-                                    <Button type="primary" onClick={handleVerifyMfa} loading={verifyingMfa}>
-                                        Xác nhận
-                                    </Button>
+                            {checkingMfa ? (
+                                <div className="flex justify-center py-8">
+                                    <Spin size="large" />
                                 </div>
-                            </div>
-                            {mfaQr && (
-                                <div className="mt-4 text-center">
-                                    <p className="text-sm text-gray-600 mb-2">
-                                        Quét QR sau bằng ứng dụng Authenticator để hoàn tất.
+                            ) : mfaEnabled === true ? (
+                                <Alert
+                                    message="MFA đã được kích hoạt"
+                                    description="Xác thực đa yếu tố (MFA) đã được bật cho tài khoản của bạn. Bạn có thể sử dụng ứng dụng Authenticator để xác thực khi đăng nhập hoặc thực hiện các tác vụ quan trọng."
+                                    type="success"
+                                    showIcon
+                                    className="mb-4"
+                                />
+                            ) : (
+                                <>
+                                    <p className="text-sm text-gray-600 mb-4">
+                                        Nhấn &quot;Gửi OTP&quot; để nhận mã qua email, sau đó nhập OTP để kích hoạt MFA.
                                     </p>
-                                    <img
-                                        src={mfaQr.startsWith("data:image") ? mfaQr : `data:image/png;base64,${mfaQr}`}
-                                        alt="MFA QR Code"
-                                        className="mx-auto border rounded-xl p-2 bg-white shadow"
-                                    />
-                                </div>
+                                    <div className="flex gap-3 flex-wrap">
+                                        <Button onClick={handleSendMfaEmail} loading={sendingMfa}>
+                                            Gửi OTP
+                                        </Button>
+                                        <div className="flex gap-2 flex-wrap items-center">
+                                            <Input
+                                                placeholder="Nhập mã OTP"
+                                                value={mfaOtp}
+                                                onChange={(e) => setMfaOtp(e.target.value)}
+                                                maxLength={10}
+                                                style={{ width: 200 }}
+                                            />
+                                            <Button type="primary" onClick={handleVerifyMfa} loading={verifyingMfa}>
+                                                Xác nhận
+                                            </Button>
+                                        </div>
+                                    </div>
+                                    {mfaQr && (
+                                        <div className="mt-4 text-center">
+                                            <p className="text-sm text-gray-600 mb-2">
+                                                Quét QR sau bằng ứng dụng Authenticator để hoàn tất.
+                                            </p>
+                                            <img
+                                                src={mfaQr.startsWith("data:image") ? mfaQr : `data:image/png;base64,${mfaQr}`}
+                                                alt="MFA QR Code"
+                                                className="mx-auto border rounded-xl p-2 bg-white shadow"
+                                            />
+                                        </div>
+                                    )}
+                                </>
                             )}
                         </Card>
 

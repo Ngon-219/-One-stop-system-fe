@@ -10,6 +10,7 @@ import {
     FileDoneOutlined,
     ApartmentOutlined,
     ClusterOutlined,
+    InboxOutlined,
 } from "@ant-design/icons";
 import type { MenuProps } from "antd";
 
@@ -48,6 +49,11 @@ const menuItems: MenuProps["items"] = [
         key: "/manager/majors",
         icon: <ClusterOutlined />,
         label: "Chuyên ngành",
+    },
+    {
+        key: "/manager/requests",
+        icon: <InboxOutlined />,
+        label: "Quản lý yêu cầu",
     },
 ];
 
