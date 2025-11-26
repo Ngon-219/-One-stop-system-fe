@@ -226,12 +226,13 @@ const LoginPage = () => {
                 />
                 <span className="ml-2 text-gray-600">Remember me</span>
               </label>
-              <a 
-                href="#" 
+              <button
+                type="button"
+                onClick={() => router.push("/forgot-password")}
                 className="text-blue-600 hover:text-blue-700 font-medium transition-colors duration-200"
               >
                 Forgot password?
-              </a>
+              </button>
             </div>
             
             <button 

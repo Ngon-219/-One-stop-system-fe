@@ -18,6 +18,16 @@ import { GetUserDetailResponse } from "./interface/response/get_user_detail";
 import { UpdateUserRequest } from "./interface/request/update_user";
 import { UpdateUserResponse } from "./interface/response/update_user";
 import { GetDocumentTypesResponse, DocumentType } from "./interface/response/get_document_types";
+import { UpdateDocumentTypeRequest } from "./interface/request/update_document_type";
+import { UserStatsResponse, DocumentStatsResponse } from "./interface/response/stats";
+import { DepartmentListResponse, DepartmentResponse } from "./interface/response/departments";
+import { MajorListResponse, MajorResponse } from "./interface/response/majors";
+import { ForgotPasswordRequest } from "./interface/request/forgot_password";
+import { ForgotPasswordResponse } from "./interface/response/forgot_password";
+import { ResetPasswordRequest } from "./interface/request/reset_password";
+import { ResetPasswordResponse } from "./interface/response/reset_password";
+import { ChangePasswordRequest } from "./interface/request/change_password";
+import { ChangePasswordResponse } from "./interface/response/change_password";
 
 export const loginNotMfaApi = async (request: LoginRequest) => {
     const baseUrl = process.env.NEXT_PUBLIC_AUTH_SERVICE_URL;
@@ -68,38 +78,293 @@ export const loginNotMfaApi = async (request: LoginRequest) => {
     return response;
 }
 
-export const profileApi = async () => {
-    let access_token = getCookie("huce_access_token")
-    console.log("Access token: ", access_token);
-    let baseUrl = process.env.NEXT_PUBLIC_AUTH_SERVICE_URL;
-    let url = baseUrl + "/api/v1/profile";
+export const forgotPasswordApi = async (
+    request: ForgotPasswordRequest
+): Promise<ForgotPasswordResponse> => {
+    const baseUrl = process.env.NEXT_PUBLIC_AUTH_SERVICE_URL;
+    const url = `${baseUrl}/api/v1/auth/forgot-password`;
 
-    console.log("base url: ", url);
+    try {
+        const response = await axios.post(url, {
+            email: request.email,
+        });
+        return response.data;
+    } catch (error: any) {
+        console.error("Failed to request forgot password:", error);
+        throw error;
+    }
+};
 
-    let response = await axios.get(url, {
-        headers: {
-            "Authorization": `Bearer ${access_token}`
-        }
-    })
-    .then(response => {
-        let res: ProfileResponse = {
-            user_id: response.data.user_id,
-            first_name: response.data.first_name,
-            last_name: response.data.last_name,
-            email: response.data.email,
-            role: response.data.role,
-            wallet_address: response.data.wallet_address,
-            blockchain_role: response.data.blockchain_role,
-            is_active: response.data.is_active
-        }
-        return res;
-    })
-    .catch(error => {
+export const getDepartmentsApi = async (): Promise<DepartmentListResponse> => {
+    const baseUrl = process.env.NEXT_PUBLIC_AUTH_SERVICE_URL;
+    const access_token = getCookie("huce_access_token");
+    const url = `${baseUrl}/api/v1/departments`;
+
+    try {
+        const response = await axios.get(url, {
+            headers: {
+                Authorization: `Bearer ${access_token}`,
+            },
+        });
+        return response.data;
+    } catch (error: any) {
+        console.error("Failed to get departments:", error);
+        throw error;
+    }
+};
+
+export const createDepartmentApi = async (
+    payload: Omit<DepartmentResponse, "department_id" | "create_at" | "update_at">
+): Promise<DepartmentResponse> => {
+    const baseUrl = process.env.NEXT_PUBLIC_AUTH_SERVICE_URL;
+    const access_token = getCookie("huce_access_token");
+    const url = `${baseUrl}/api/v1/departments`;
+
+    try {
+        const response = await axios.post(
+            url,
+            {
+                name: payload.name,
+                founding_date: payload.founding_date,
+                dean: payload.dean,
+            },
+            {
+                headers: {
+                    Authorization: `Bearer ${access_token}`,
+                },
+            }
+        );
+        return response.data;
+    } catch (error: any) {
+        console.error("Failed to create department:", error);
+        throw error;
+    }
+};
+
+export const updateDepartmentApi = async (
+    departmentId: string,
+    payload: Partial<Omit<DepartmentResponse, "department_id" | "create_at" | "update_at">>
+): Promise<DepartmentResponse> => {
+    const baseUrl = process.env.NEXT_PUBLIC_AUTH_SERVICE_URL;
+    const access_token = getCookie("huce_access_token");
+    const url = `${baseUrl}/api/v1/departments/${departmentId}`;
+
+    try {
+        const response = await axios.put(url, payload, {
+            headers: {
+                Authorization: `Bearer ${access_token}`,
+            },
+        });
+        return response.data;
+    } catch (error: any) {
+        console.error("Failed to update department:", error);
+        throw error;
+    }
+};
+
+export const deleteDepartmentApi = async (departmentId: string): Promise<void> => {
+    const baseUrl = process.env.NEXT_PUBLIC_AUTH_SERVICE_URL;
+    const access_token = getCookie("huce_access_token");
+    const url = `${baseUrl}/api/v1/departments/${departmentId}`;
+
+    try {
+        await axios.delete(url, {
+            headers: {
+                Authorization: `Bearer ${access_token}`,
+            },
+        });
+    } catch (error: any) {
+        console.error("Failed to delete department:", error);
+        throw error;
+    }
+};
+
+export const getMajorsApi = async (): Promise<MajorListResponse> => {
+    const baseUrl = process.env.NEXT_PUBLIC_AUTH_SERVICE_URL;
+    const access_token = getCookie("huce_access_token");
+    const url = `${baseUrl}/api/v1/majors`;
+
+    try {
+        const response = await axios.get(url, {
+            headers: {
+                Authorization: `Bearer ${access_token}`,
+            },
+        });
+        return response.data;
+    } catch (error: any) {
+        console.error("Failed to get majors:", error);
+        throw error;
+    }
+};
+
+export const createMajorApi = async (
+    payload: Omit<MajorResponse, "major_id" | "create_at" | "update_at">
+): Promise<MajorResponse> => {
+    const baseUrl = process.env.NEXT_PUBLIC_AUTH_SERVICE_URL;
+    const access_token = getCookie("huce_access_token");
+    const url = `${baseUrl}/api/v1/majors`;
+
+    try {
+        const response = await axios.post(
+            url,
+            {
+                name: payload.name,
+                founding_date: payload.founding_date,
+                department_id: payload.department_id,
+            },
+            {
+                headers: {
+                    Authorization: `Bearer ${access_token}`,
+                },
+            }
+        );
+        return response.data;
+    } catch (error: any) {
+        console.error("Failed to create major:", error);
+        throw error;
+    }
+};
+
+export const updateMajorApi = async (
+    majorId: string,
+    payload: Partial<Omit<MajorResponse, "major_id" | "create_at" | "update_at">>
+): Promise<MajorResponse> => {
+    const baseUrl = process.env.NEXT_PUBLIC_AUTH_SERVICE_URL;
+    const access_token = getCookie("huce_access_token");
+    const url = `${baseUrl}/api/v1/majors/${majorId}`;
+
+    try {
+        const response = await axios.put(url, payload, {
+            headers: {
+                Authorization: `Bearer ${access_token}`,
+            },
+        });
+        return response.data;
+    } catch (error: any) {
+        console.error("Failed to update major:", error);
+        throw error;
+    }
+};
+
+export const deleteMajorApi = async (majorId: string): Promise<void> => {
+    const baseUrl = process.env.NEXT_PUBLIC_AUTH_SERVICE_URL;
+    const access_token = getCookie("huce_access_token");
+    const url = `${baseUrl}/api/v1/majors/${majorId}`;
+
+    try {
+        await axios.delete(url, {
+            headers: {
+                Authorization: `Bearer ${access_token}`,
+            },
+        });
+    } catch (error: any) {
+        console.error("Failed to delete major:", error);
+        throw error;
+    }
+};
+
+export const resetPasswordApi = async (
+    request: ResetPasswordRequest
+): Promise<ResetPasswordResponse> => {
+    const baseUrl = process.env.NEXT_PUBLIC_AUTH_SERVICE_URL;
+    const url = `${baseUrl}/api/v1/auth/reset-password`;
+
+    try {
+        const response = await axios.post(url, {
+            email: request.email,
+            otpCode: request.otpCode,
+            newPassword: request.newPassword,
+        });
+        return response.data;
+    } catch (error: any) {
+        console.error("Failed to reset password:", error);
+        throw error;
+    }
+};
+
+export const changePasswordApi = async (
+    request: ChangePasswordRequest
+): Promise<ChangePasswordResponse> => {
+    const baseUrl = process.env.NEXT_PUBLIC_AUTH_SERVICE_URL;
+    const access_token = getCookie("huce_access_token");
+    const url = `${baseUrl}/api/v1/auth/change-password`;
+
+    try {
+        const response = await axios.post(
+            url,
+            {
+                oldPassword: request.oldPassword,
+                newPassword: request.newPassword,
+            },
+            {
+                headers: {
+                    Authorization: `Bearer ${access_token}`,
+                },
+            }
+        );
+        return response.data;
+    } catch (error: any) {
+        console.error("Failed to change password:", error);
+        throw error;
+    }
+};
+
+export const profileApi = async (): Promise<ProfileResponse> => {
+    const access_token = getCookie("huce_access_token");
+    const baseUrl = process.env.NEXT_PUBLIC_AUTH_SERVICE_URL;
+    const url = `${baseUrl}/api/v1/profile`;
+
+    try {
+        const response = await axios.get(url, {
+            headers: {
+                "Authorization": `Bearer ${access_token}`
+            }
+        });
+        return response.data;
+    } catch (error: any) {
         console.log("Error login message: ", error);
         throw error;
-    })
+    }
+}
 
-    return response;
+export const requestEnableMfaEmailApi = async () => {
+    const access_token = getCookie("huce_access_token");
+    const baseUrl = process.env.NEXT_PUBLIC_AUTH_SERVICE_URL;
+    const url = `${baseUrl}/api/v1/user-mfa/enable`;
+
+    try {
+        const response = await axios.post(url, {}, {
+            headers: {
+                "Authorization": `Bearer ${access_token}`
+            }
+        });
+        return response.data;
+    } catch (error: any) {
+        console.error("Failed to request MFA email:", error);
+        throw error;
+    }
+}
+
+export const confirmEnableMfaApi = async (otpCode: string) => {
+    const access_token = getCookie("huce_access_token");
+    const baseUrl = process.env.NEXT_PUBLIC_AUTH_SERVICE_URL;
+    const url = `${baseUrl}/api/v1/user-mfa/enable-mfa`;
+    console.log("base url confirm enable mfa: ", url);
+
+    try {
+        const response = await axios.post(url, {
+            otpCode,
+        }, {
+            headers: {
+                "Authorization": `Bearer ${access_token}`,
+                "Content-Type": "application/json",
+            }
+        });
+        return response.data;
+    } catch (error: any) {
+        console.error("Failed to confirm MFA enable:", error);
+        throw error;
+    }
 }
 
 export const logoutApi = async () => {
@@ -504,6 +769,79 @@ export const getDocumentTypesApi = async (): Promise<GetDocumentTypesResponse> =
         };
     } catch (error: any) {
         console.error("Failed to get document types:", error);
+        throw error;
+    }
+}
+
+export const getDocumentTypeByIdApi = async (documentTypeId: string): Promise<DocumentType> => {
+    let baseUrl = process.env.NEXT_PUBLIC_AUTH_SERVICE_URL;
+    let url = baseUrl + `/api/v1/documents/types/${documentTypeId}`;
+    let access_token = getCookie("huce_access_token");
+    
+    try {
+        const response = await axios.get(url, {
+            headers: {
+                "Authorization": `Bearer ${access_token}`
+            }
+        });
+        return response.data;
+    } catch (error: any) {
+        console.error("Failed to get document type:", error);
+        throw error;
+    }
+}
+
+export const updateDocumentTypeApi = async (documentTypeId: string, request: UpdateDocumentTypeRequest): Promise<DocumentType> => {
+    let baseUrl = process.env.NEXT_PUBLIC_AUTH_SERVICE_URL;
+    let url = baseUrl + `/api/v1/documents/types/${documentTypeId}`;
+    let access_token = getCookie("huce_access_token");
+    
+    try {
+        const response = await axios.put(url, request, {
+            headers: {
+                "Authorization": `Bearer ${access_token}`,
+                "Content-Type": "application/json"
+            }
+        });
+        return response.data;
+    } catch (error: any) {
+        console.error("Failed to update document type:", error);
+        throw error;
+    }
+}
+
+export const getUserStatsApi = async (startDate: string, endDate: string): Promise<UserStatsResponse> => {
+    const baseUrl = process.env.NEXT_PUBLIC_AUTH_SERVICE_URL;
+    const access_token = getCookie("huce_access_token");
+    const url = `${baseUrl}/api/v1/stats/users?startDate=${startDate}&endDate=${endDate}`;
+
+    try {
+        const response = await axios.get(url, {
+            headers: {
+                "Authorization": `Bearer ${access_token}`,
+            },
+        });
+        return response.data;
+    } catch (error: any) {
+        console.error("Failed to get user stats:", error);
+        throw error;
+    }
+}
+
+export const getDocumentStatsApi = async (startDate: string, endDate: string): Promise<DocumentStatsResponse> => {
+    const baseUrl = process.env.NEXT_PUBLIC_AUTH_SERVICE_URL;
+    const access_token = getCookie("huce_access_token");
+    const url = `${baseUrl}/api/v1/stats/documents?startDate=${startDate}&endDate=${endDate}`;
+
+    try {
+        const response = await axios.get(url, {
+            headers: {
+                "Authorization": `Bearer ${access_token}`,
+            },
+        });
+        return response.data;
+    } catch (error: any) {
+        console.error("Failed to get document stats:", error);
         throw error;
     }
 }

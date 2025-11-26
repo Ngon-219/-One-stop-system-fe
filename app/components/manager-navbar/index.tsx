@@ -2,11 +2,14 @@
 
 import { usePathname, useRouter } from "next/navigation";
 import { Menu } from "antd";
-import { 
-    DashboardOutlined, 
-    UserOutlined, 
-    UserAddOutlined, 
-    FileTextOutlined 
+import {
+    DashboardOutlined,
+    UserOutlined,
+    UserAddOutlined,
+    FileTextOutlined,
+    FileDoneOutlined,
+    ApartmentOutlined,
+    ClusterOutlined,
 } from "@ant-design/icons";
 import type { MenuProps } from "antd";
 
@@ -30,6 +33,21 @@ const menuItems: MenuProps["items"] = [
         key: "/manager/documents",
         icon: <FileTextOutlined />,
         label: "Quản lý tài liệu",
+    },
+    {
+        key: "/manager/documents/handle-documents",
+        icon: <FileDoneOutlined />,
+        label: "Xử lý tài liệu",
+    },
+    {
+        key: "/manager/departments",
+        icon: <ApartmentOutlined />,
+        label: "Khoa/Phòng ban",
+    },
+    {
+        key: "/manager/majors",
+        icon: <ClusterOutlined />,
+        label: "Chuyên ngành",
     },
 ];
 

@@ -15,13 +15,11 @@ export const removeCookie = (name: string) => {
 export const handleUnauthorized = () => {
     if (typeof window === "undefined") return;
     
-    // Xóa tất cả cookies liên quan đến auth
     removeCookie("huce_access_token");
     removeCookie("huce_email");
     removeCookie("huce_expires_in");
     removeCookie("huce_role");
     removeCookie("huce_user_id");
     
-    // Redirect về login
     window.location.href = "/login";
 }

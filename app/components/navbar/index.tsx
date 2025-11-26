@@ -2,6 +2,7 @@ import Image from "next/image";
 import ProfileImg from "../../../public/assets/images/profile.png";
 import { useAuth } from "@/app/context/AuthContext";
 import { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
 import { logoutApi, profileApi } from "@/app/api/auth_service";
 import { ProfileResponse } from "@/app/api/interface/response/profile";
 import { LogoutResponse } from "@/app/api/interface/response/logout";
@@ -9,6 +10,7 @@ import Swal from "sweetalert2";
 
 export const NavBar = () => {
   let {logout, user} = useAuth();
+  const router = useRouter();
   let [userResponse, setUserResponse] = useState<ProfileResponse>();
 
   const handleLogout = async () => {
@@ -73,9 +75,11 @@ export const NavBar = () => {
             </div>
             <div>
               <p className="text-sm text-gray-500 uppercase tracking-[0.3em]">
-                {user?.role}
+                {userResponse?.user.role}
               </p>
-              <p className="text-xl font-semibold text-[#0f3f78]">{userResponse?.last_name + " " + userResponse?.first_name}</p>
+              <p className="text-xl font-semibold text-[#0f3f78]">
+                {userResponse ? `${userResponse.user.last_name} ${userResponse.user.first_name}` : ""}
+              </p>
               <p className="text-sm text-gray-500 hover:cursor-pointer flex gap-1 items-center" onClick={handleLogout}>
                 <span>ID: {user?.user_id}</span>
                 <span>·</span>
@@ -85,12 +89,15 @@ export const NavBar = () => {
           </div>
 
           <div className="flex gap-3">
-            <button className="px-5 py-3 text-sm font-semibold border border-gray-200 rounded-xl text-gray-600 hover:bg-gray-50 transition-colors">
+            <button
+              onClick={() => router.push("/profile")}
+              className="px-5 py-3 text-sm font-semibold border border-gray-200 rounded-xl text-gray-600 hover:bg-gray-50 transition-colors"
+            >
               Xem hồ sơ
             </button>
-            <button className="px-5 py-3 text-sm font-semibold text-white bg-[#17a24a] rounded-xl hover:bg-[#12813a] transition-colors">
+            {/* <button className="px-5 py-3 text-sm font-semibold text-white bg-[#17a24a] rounded-xl hover:bg-[#12813a] transition-colors">
               Cập nhật hồ sơ
-            </button>
+            </button> */}
           </div>
         </div>
       </div>
