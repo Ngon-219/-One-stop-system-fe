@@ -1,11 +1,14 @@
 "use client" 
-import { getUserPagination, deleteUserApi, getUserDetailApi } from "@/app/api/auth_service";
+import { getUserPagination, deleteUserApi, getUserDetailApi, updateUserApi, getAllMajor } from "@/app/api/auth_service";
 import { getUserPaginationReq } from "@/app/api/interface/request/get_user";
 import { GetUserPaginationResponse, User } from "@/app/api/interface/response/get_user_pagination";
 import { GetUserDetailResponse } from "@/app/api/interface/response/get_user_detail";
+import { UpdateUserRequest } from "@/app/api/interface/request/update_user";
+import { UpdateUserResponse } from "@/app/api/interface/response/update_user";
+import { major } from "@/app/api/interface/response/get_all_major";
 import NavBar from "@/app/components/navbar"
-import { Table, Button, Tooltip, Input, Select, Modal, Descriptions, Tag, Spin } from 'antd';
-import { useEffect, useState, useCallback, useRef } from "react";
+import { Table, Button, Tooltip, Input, Select, Modal, Descriptions, Tag, Spin, Form } from 'antd';
+import { useEffect, useState, useCallback, useRef, useMemo } from "react";
 import { EyeOutlined, EditOutlined, DeleteOutlined } from '@ant-design/icons';
 import Swal from "sweetalert2";
 import { DeleteUserResponse } from "@/app/api/interface/response/delete_user";
@@ -37,6 +40,12 @@ export default function UserManagePage() {
     const [isModalVisible, setIsModalVisible] = useState<boolean>(false);
     const [userDetail, setUserDetail] = useState<GetUserDetailResponse | null>(null);
     const [loadingDetail, setLoadingDetail] = useState<boolean>(false);
+    const [isEditModalVisible, setIsEditModalVisible] = useState<boolean>(false);
+    const [editingUser, setEditingUser] = useState<GetUserDetailResponse | null>(null);
+    const [loadingEdit, setLoadingEdit] = useState<boolean>(false);
+    const [majors, setMajors] = useState<major[]>([]);
+    const [loadingMajors, setLoadingMajors] = useState<boolean>(false);
+    const [editForm] = Form.useForm();
 
     // Lưu api vào ref để tránh stale closure
     const apiRef = useRef(api);
@@ -134,7 +143,27 @@ export default function UserManagePage() {
 
     useEffect(() => {
         fetchUsers();
-    }, [])
+        fetchMajors();
+    }, []);
+
+    const fetchMajors = async () => {
+        setLoadingMajors(true);
+        try {
+            const response = await getAllMajor();
+            if (response?.majors) {
+                setMajors(response.majors);
+            }
+        } catch (err) {
+            console.error("Failed to load majors", err);
+        } finally {
+            setLoadingMajors(false);
+        }
+    };
+
+    const majorOptions = useMemo(
+        () => majors.map((m) => ({ label: m.name, value: m.major_id })),
+        [majors]
+    );
 
     const handleAction = async (item: TableUser) => {
         setIsModalVisible(true);
@@ -160,6 +189,103 @@ export default function UserManagePage() {
     const handleCloseModal = () => {
         setIsModalVisible(false);
         setUserDetail(null);
+    };
+
+    const handleEdit = async (item: TableUser) => {
+        setIsEditModalVisible(true);
+        setLoadingEdit(true);
+        setEditingUser(null);
+        
+        try {
+            const detail = await getUserDetailApi(item.userID);
+            setEditingUser(detail);
+            // Pre-fill form
+            editForm.setFieldsValue({
+                first_name: detail.first_name,
+                last_name: detail.last_name,
+                email: detail.email,
+                phone_number: detail.phone_number,
+                cccd: detail.cccd,
+                address: detail.address,
+                major_ids: detail.major_ids,
+                role: detail.role,
+            });
+        } catch (error) {
+            console.error("Failed to fetch user detail:", error);
+            Swal.fire({
+                icon: "error",
+                title: "Lỗi",
+                text: "Không thể tải thông tin người dùng!",
+            });
+            setIsEditModalVisible(false);
+        } finally {
+            setLoadingEdit(false);
+        }
+    };
+
+    const handleCloseEditModal = () => {
+        setIsEditModalVisible(false);
+        setEditingUser(null);
+        editForm.resetFields();
+    };
+
+    const handleEditSubmit = async (values: any) => {
+        if (!editingUser) return;
+
+        // Xác nhận với Swal
+        const result = await Swal.fire({
+            title: "Xác nhận chỉnh sửa",
+            text: "Bạn có chắc chắn muốn cập nhật thông tin người dùng này?",
+            icon: "question",
+            showCancelButton: true,
+            confirmButtonColor: "#3085d6",
+            cancelButtonColor: "#d33",
+            confirmButtonText: "Xác nhận",
+            cancelButtonText: "Hủy"
+        });
+
+        if (!result.isConfirmed) {
+            return;
+        }
+
+        setLoadingEdit(true);
+        try {
+            const updateData: UpdateUserRequest = {
+                first_name: values.first_name,
+                last_name: values.last_name,
+                email: values.email,
+                phone_number: values.phone_number,
+                cccd: values.cccd,
+                address: values.address,
+                major_ids: values.major_ids,
+                role: values.role || null,
+            };
+
+            // Chỉ gửi password nếu có thay đổi
+            if (values.password && values.password.trim() !== "") {
+                updateData.password = values.password;
+            }
+
+            await updateUserApi(editingUser.user_id, updateData);
+            
+            Swal.fire({
+                icon: "success",
+                title: "Thành công",
+                text: "Cập nhật thông tin người dùng thành công!",
+            });
+
+            handleCloseEditModal();
+            fetchUsers(); // Refresh danh sách
+        } catch (error: any) {
+            console.error("Failed to update user:", error);
+            Swal.fire({
+                icon: "error",
+                title: "Lỗi",
+                text: error.response?.data?.message || "Không thể cập nhật thông tin người dùng!",
+            });
+        } finally {
+            setLoadingEdit(false);
+        }
     };
 
 
@@ -223,39 +349,29 @@ export default function UserManagePage() {
             title: 'Hành động',
             key: 'action',
             render: (_: any, record: TableUser) => (
-                <Tooltip title="Chi tiết">
+                <div>
+                    <Tooltip title="Chi tiết">
                     <Button 
                         type="text"
                         icon={<EyeOutlined style={{ color: '#1890ff' }} />} // Đổi màu icon cho nổi
                         onClick={() => handleAction(record)} 
                     />
                 </Tooltip>
-            ),
-        },
-        {
-            title: 'Hành động',
-            key: 'action',
-            render: (_: any, record: TableUser) => (
-                <Tooltip title="Chi tiết">
-                    <Button 
-                        type="text"
-                        icon={<EditOutlined style={{ color: '#1890ff' }} />}
-                        onClick={() => handleAction(record)} 
-                    />
-                </Tooltip>
-            ),
-        },
-        {
-            title: 'Hành động',
-            key: 'action',
-            render: (_: any, record: TableUser) => (
-                <Tooltip title="Chi tiết">
+                 <Tooltip title="Chỉnh sửa">
+                     <Button 
+                         type="text"
+                         icon={<EditOutlined style={{ color: '#1890ff' }} />}
+                         onClick={() => handleEdit(record)} 
+                     />
+                 </Tooltip>
+                <Tooltip title="Xóa">
                     <Button 
                         type="text"
                         icon={<DeleteOutlined style={{ color: '#eb4f34' }} />}
                         onClick={() => handleDelete(record)} 
                     />
                 </Tooltip>
+                </div>
             ),
         },
       ];
@@ -405,6 +521,125 @@ export default function UserManagePage() {
                         </Descriptions.Item>
                     </Descriptions>
                 ) : null}
+            </Modal>
+
+            <Modal
+                title="Chỉnh sửa người dùng"
+                open={isEditModalVisible}
+                onCancel={handleCloseEditModal}
+                footer={null}
+                width={700}
+            >
+                {loadingEdit && !editingUser ? (
+                    <div className="flex justify-center items-center py-12">
+                        <Spin size="large" />
+                    </div>
+                ) : (
+                    <Form
+                        form={editForm}
+                        layout="vertical"
+                        onFinish={handleEditSubmit}
+                        className="mt-4"
+                    >
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            <Form.Item
+                                label="Họ"
+                                name="last_name"
+                                rules={[{ required: true, message: "Vui lòng nhập họ" }]}
+                            >
+                                <Input placeholder="Nguyen" />
+                            </Form.Item>
+                            <Form.Item
+                                label="Tên"
+                                name="first_name"
+                                rules={[{ required: true, message: "Vui lòng nhập tên" }]}
+                            >
+                                <Input placeholder="Van A" />
+                            </Form.Item>
+                            <Form.Item
+                                label="Email"
+                                name="email"
+                                rules={[
+                                    { required: true, message: "Vui lòng nhập email" },
+                                    { type: "email", message: "Email không hợp lệ" },
+                                ]}
+                            >
+                                <Input placeholder="nguyenvana@example.com" />
+                            </Form.Item>
+                            <Form.Item
+                                label="Số điện thoại"
+                                name="phone_number"
+                                rules={[{ required: true, message: "Vui lòng nhập số điện thoại" }]}
+                            >
+                                <Input placeholder="0912345678" />
+                            </Form.Item>
+                            <Form.Item
+                                label="CCCD"
+                                name="cccd"
+                                rules={[{ required: true, message: "Vui lòng nhập CCCD" }]}
+                            >
+                                <Input placeholder="0123456789" />
+                            </Form.Item>
+                            <Form.Item
+                                label="Mật khẩu mới (để trống nếu không đổi)"
+                                name="password"
+                            >
+                                <Input.Password placeholder="Để trống nếu không đổi" />
+                            </Form.Item>
+                        </div>
+                        <Form.Item
+                            label="Địa chỉ"
+                            name="address"
+                            rules={[{ required: true, message: "Vui lòng nhập địa chỉ" }]}
+                        >
+                            <Input.TextArea rows={3} placeholder="123 Main St, Hanoi" />
+                        </Form.Item>
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            <Form.Item
+                                label="Vai trò"
+                                name="role"
+                            >
+                                <Select
+                                    placeholder="Chọn vai trò (để trống nếu không đổi)"
+                                    allowClear
+                                    options={[
+                                        { label: "Admin", value: "Admin" },
+                                        { label: "Manager", value: "Manager" },
+                                        { label: "Student", value: "Student" },
+                                        { label: "Teacher", value: "Teacher" },
+                                    ]}
+                                />
+                            </Form.Item>
+                            <Form.Item
+                                label="Chuyên ngành"
+                                name="major_ids"
+                                rules={[
+                                    {
+                                        required: true,
+                                        message: "Vui lòng chọn ít nhất một chuyên ngành",
+                                    },
+                                ]}
+                            >
+                                <Select
+                                    mode="multiple"
+                                    placeholder="Chọn chuyên ngành"
+                                    loading={loadingMajors}
+                                    options={majorOptions}
+                                />
+                            </Form.Item>
+                        </div>
+                        <Form.Item className="mb-0 mt-4">
+                            <div className="flex justify-end gap-2">
+                                <Button onClick={handleCloseEditModal}>
+                                    Hủy
+                                </Button>
+                                <Button type="primary" htmlType="submit" loading={loadingEdit}>
+                                    Cập nhật
+                                </Button>
+                            </div>
+                        </Form.Item>
+                    </Form>
+                )}
             </Modal>
         </div>
     )

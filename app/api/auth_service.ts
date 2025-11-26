@@ -15,6 +15,8 @@ import { createNewUserRes } from "./interface/response/create_new_user";
 import { gettUploadHistoryReq } from "./interface/request/upload_history";
 import { GetUploadHistoryResponse } from "./interface/response/get_upload_history";
 import { GetUserDetailResponse } from "./interface/response/get_user_detail";
+import { UpdateUserRequest } from "./interface/request/update_user";
+import { UpdateUserResponse } from "./interface/response/update_user";
 
 export const loginNotMfaApi = async (request: LoginRequest) => {
     const baseUrl = process.env.NEXT_PUBLIC_AUTH_SERVICE_URL;
@@ -462,6 +464,25 @@ export const getUserDetailApi = async (userId: string): Promise<GetUserDetailRes
         return response.data;
     } catch (error: any) {
         console.error("Failed to get user detail:", error);
+        throw error;
+    }
+}
+
+export const updateUserApi = async (userId: string, request: UpdateUserRequest): Promise<UpdateUserResponse> => {
+    let baseUrl = process.env.NEXT_PUBLIC_AUTH_SERVICE_URL;
+    let url = baseUrl + `/api/v1/users/${userId}`;
+    let access_token = getCookie("huce_access_token");
+    
+    try {
+        const response = await axios.put(url, request, {
+            headers: {
+                "Authorization": `Bearer ${access_token}`,
+                "Content-Type": "application/json"
+            }
+        });
+        return response.data;
+    } catch (error: any) {
+        console.error("Failed to update user:", error);
         throw error;
     }
 }
