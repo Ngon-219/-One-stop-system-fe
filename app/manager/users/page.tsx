@@ -4,12 +4,15 @@ import { getUserPaginationReq } from "@/app/api/interface/request/get_user";
 import { GetUserPaginationResponse, User } from "@/app/api/interface/response/get_user_pagination";
 import NavBar from "@/app/components/navbar"
 import { Table, Button, Tooltip, Input, Select } from 'antd';
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback, useRef } from "react";
 import { EyeOutlined, EditOutlined, DeleteOutlined } from '@ant-design/icons';
 import Swal from "sweetalert2";
 import { deleteUserApi } from "@/app/api/auth_service";
 import { DeleteUserResponse } from "@/app/api/interface/response/delete_user";
 import { useRouter } from "next/navigation";
+import { useSocket } from "@/app/hooks/useSocket";
+import { extractDataFromRaw } from "../create-user/page";
+import { notification } from "antd";
 
 interface TableUser {
     studentCode: string;
@@ -29,7 +32,54 @@ export default function UserManagePage() {
     let [searchValue, setSearchValue] = useState<string>("");
     let [loading, setLoading] = useState<boolean>(false);
     let [selectedRole, setSelectedRole] = useState<string | undefined>(undefined);
+    const [api, contextHolder] = notification.useNotification();
     const router = useRouter();
+
+    // Lưu api vào ref để tránh stale closure
+    const apiRef = useRef(api);
+    useEffect(() => {
+        apiRef.current = api;
+    }, [api]);
+
+    // Sử dụng useCallback để tạo stable callback
+    const handleSocketEvent = useCallback((data: any) => {
+        console.log("Received event:", data);
+        console.log("Event data type:", typeof data);
+        console.log("Event data:", JSON.stringify(data));
+        
+        const formatted_data = extractDataFromRaw(data);
+        console.log("Formatted data:", formatted_data);
+        
+        if (formatted_data) {
+            const isSuccess = formatted_data.status === "success";
+            const message = isSuccess 
+                ? `Người dùng ${formatted_data.email} đã được tạo thành công!`
+                : `Tạo người dùng ${formatted_data.email} thất bại!`;
+            
+            // Sử dụng setTimeout để đưa notification ra khỏi render phase
+            setTimeout(() => {
+                if (isSuccess) {
+                    apiRef.current.success({
+                        title: `Thông báo tạo người dùng`,
+                        description: message,
+                        placement: 'bottomRight',
+                    });
+                } else {
+                    apiRef.current.error({
+                        title: `Thông báo tạo người dùng`,
+                        description: message,
+                        placement: 'bottomRight',
+                    });
+                }
+            }, 0);
+        } else {
+            console.log("formatted_data is null, cannot show notification");
+        }
+    }, []);
+
+    useSocket({
+        onEvent: handleSocketEvent
+    });
 
     const fetchUsers = async (params?: { limit?: number; page?: number; search?: string; role?: string }) => {
         const {
@@ -211,6 +261,7 @@ export default function UserManagePage() {
 
     return (
         <div className="h-full w-full flex flex-col items-center justify-center">
+            {contextHolder}
             <NavBar />
             <div className="w-[90vw] flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between mb-4">
                 <Select

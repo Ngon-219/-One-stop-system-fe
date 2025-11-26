@@ -1,15 +1,17 @@
 "use client" 
-import { getUploadHistoryApi, uploadChunkApi, syncDBApi, getBulkCreateProgressApi } from "@/app/api/auth_service";
+import { getUploadHistoryApi, uploadChunkApi, syncDBApi, getBulkCreateProgressApi, syncBlockchainApi, getBlockchainProgressApi } from "@/app/api/auth_service";
 import { gettUploadHistoryReq } from "@/app/api/interface/request/upload_history";
 import { GetUploadHistoryResponse, FileUploadHistoryItem } from "@/app/api/interface/response/get_upload_history";
 import { BulkCreateProgressResponse } from "@/app/api/interface/response/bulk_create_progress";
 import NavBar from "@/app/components/navbar"
-import { Table, Button, Tooltip, Input, Select, Tag, Upload, Progress, message, Modal } from 'antd';
+import { Table, Button, Tooltip, Input, Select, Tag, Upload, Progress, message, Modal, notification } from 'antd';
 import { useEffect, useState, useRef, useCallback, useMemo, memo } from "react";
 import { EyeOutlined, DownloadOutlined, UploadOutlined } from '@ant-design/icons';
 import { useRouter } from "next/navigation";
 import type { UploadFile } from 'antd';
 import { useLoading } from "@/app/context/LoadingContext";
+import { useSocket } from "@/app/hooks/useSocket";
+import { extractDataFromRaw } from "../page";
 
 interface TableUploadHistory {
     key: string;
@@ -33,6 +35,7 @@ export default function UploadPageManager() {
     const [syncProgressMap, setSyncProgressMap] = useState<Record<string, BulkCreateProgressResponse>>({});
     const progressIntervalRefs = useRef<Record<string, NodeJS.Timeout>>({});
     const router = useRouter();
+    const [api, contextHolder] = notification.useNotification();
 
     const fetchUploadHistory = async (params?: { limit?: number; page?: number; search?: string; status?: string }) => {
         const {
@@ -87,7 +90,53 @@ export default function UploadPageManager() {
 
     useEffect(() => {
         fetchUploadHistory();
-    }, [])
+    }, []);
+
+    // Lưu api vào ref để tránh stale closure
+    const apiRef = useRef(api);
+    useEffect(() => {
+        apiRef.current = api;
+    }, [api]);
+
+    // Sử dụng useCallback để tạo stable callback
+    const handleSocketEvent = useCallback((data: any) => {
+        console.log("Received event:", data);
+        console.log("Event data type:", typeof data);
+        console.log("Event data:", JSON.stringify(data));
+        
+        const formatted_data = extractDataFromRaw(data);
+        console.log("Formatted data:", formatted_data);
+        
+        if (formatted_data) {
+            const isSuccess = formatted_data.status === "success";
+            const message = isSuccess 
+                ? `Người dùng ${formatted_data.email} đã được tạo thành công!`
+                : `Tạo người dùng ${formatted_data.email} thất bại!`;
+            
+            // Sử dụng setTimeout để đưa notification ra khỏi render phase
+            setTimeout(() => {
+                if (isSuccess) {
+                    apiRef.current.success({
+                        title: `Thông báo tạo người dùng`,
+                        description: message,
+                        placement: 'bottomRight',
+                    });
+                } else {
+                    apiRef.current.error({
+                        title: `Thông báo tạo người dùng`,
+                        description: message,
+                        placement: 'bottomRight',
+                    });
+                }
+            }, 0);
+        } else {
+            console.log("formatted_data is null, cannot show notification");
+        }
+    }, []);
+
+    useSocket({
+        onEvent: handleSocketEvent
+    });
 
     const handleView = (item: TableUploadHistory) => {
         console.log("View upload:", item.fileUploadHistoryId); 
@@ -211,11 +260,110 @@ export default function UploadPageManager() {
         };
     }, []);
 
-    const handleSyncBlockchain = (item: TableUploadHistory) => {
-        console.log("Sync Blockchain for:", item.fileUploadHistoryId);
-        // Implement sync blockchain logic
-        // Sau khi sync thành công, refresh lại data
-        fetchUploadHistory();
+    const handleSyncBlockchain = async (item: TableUploadHistory) => {
+        const historyId = item.fileUploadHistoryId;
+        
+        try {
+            // Gọi API sync Blockchain
+            await syncBlockchainApi(historyId);
+            message.info("Đã bắt đầu đồng bộ Blockchain...");
+        } catch (error: any) {
+            // Nếu status code là 409, có thể đang sync rồi, vẫn hiển thị progress
+            if (error.response?.status === 409) {
+                // Không log error khi 409 vì đây là trường hợp bình thường
+                message.info("Đang kiểm tra tiến trình đồng bộ Blockchain...");
+            } else {
+                console.error("Failed to sync Blockchain:", error);
+                message.error(`Đồng bộ Blockchain thất bại: ${error.response?.data?.message || error.message}`);
+                return; // Thoát nếu không phải 409
+            }
+        }
+        
+        // Bắt đầu poll progress (kể cả khi 409)
+        let lastUpdateTime = 0;
+        const UPDATE_THROTTLE = 1000; // Chỉ update UI mỗi 1 giây
+        let isPolling = true;
+        
+        const pollProgress = async () => {
+            if (!isPolling) return;
+            
+            try {
+                const progress = await getBlockchainProgressApi(historyId);
+                const now = Date.now();
+                
+                // Throttle update để tránh update quá nhanh
+                if (now - lastUpdateTime < UPDATE_THROTTLE && 
+                    progress.status !== "completed" && 
+                    progress.status !== "failed") {
+                    // Schedule next poll
+                    if (isPolling) {
+                        progressIntervalRefs.current[historyId] = setTimeout(pollProgress, 2000);
+                    }
+                    return;
+                }
+                lastUpdateTime = now;
+                
+                // Sử dụng requestAnimationFrame để update mượt mà và batch updates
+                requestAnimationFrame(() => {
+                    setSyncProgressMap(prev => {
+                        const current = prev[historyId];
+                        // So sánh để chỉ update khi có thay đổi
+                        if (current && 
+                            current.processed === progress.processed && 
+                            current.status === progress.status &&
+                            current.success === progress.success &&
+                            current.failed === progress.failed &&
+                            current.progress_percentage === progress.progress_percentage) {
+                            return prev; // Không thay đổi, tránh re-render
+                        }
+                        // Tạo object mới chỉ khi cần thiết
+                        return {
+                            ...prev,
+                            [historyId]: { ...progress }
+                        };
+                    });
+                });
+                
+                // Nếu đã hoàn thành hoặc thất bại, dừng polling
+                if (progress.status === "completed" || progress.status === "failed") {
+                    isPolling = false;
+                    if (progressIntervalRefs.current[historyId]) {
+                        clearTimeout(progressIntervalRefs.current[historyId]);
+                        delete progressIntervalRefs.current[historyId];
+                    }
+                    
+                    if (progress.status === "completed") {
+                        message.success("Đồng bộ Blockchain thành công!");
+                    } else {
+                        message.error("Đồng bộ Blockchain thất bại!");
+                    }
+                    
+                    // Refresh danh sách sau 2 giây
+                    setTimeout(() => {
+                        setSyncProgressMap(prev => {
+                            const newMap = { ...prev };
+                            delete newMap[historyId];
+                            return newMap;
+                        });
+                        fetchUploadHistory();
+                    }, 2000);
+                } else {
+                    // Schedule next poll
+                    if (isPolling) {
+                        progressIntervalRefs.current[historyId] = setTimeout(pollProgress, 3000);
+                    }
+                }
+            } catch (error) {
+                console.error("Failed to get blockchain progress:", error);
+                // Retry sau 3 giây nếu có lỗi
+                if (isPolling) {
+                    progressIntervalRefs.current[historyId] = setTimeout(pollProgress, 3000);
+                }
+            }
+        };
+        
+        // Bắt đầu poll
+        pollProgress();
     };
 
     const getStatusColor = (status: string) => {
@@ -447,6 +595,7 @@ export default function UploadPageManager() {
 
     return (
         <div className="h-full w-full flex flex-col items-center justify-center">
+            {contextHolder}
             <NavBar />
             <div className="w-[90vw] flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between mb-4">
                 <Select

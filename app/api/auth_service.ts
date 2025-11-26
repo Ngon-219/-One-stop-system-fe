@@ -387,3 +387,62 @@ export const getBulkCreateProgressApi = async (historyFileUploadId: string) => {
         throw error;
     }
 }
+
+export const syncBlockchainApi = async (historyFileUploadId: string) => {
+    let baseUrl = process.env.NEXT_PUBLIC_AUTH_SERVICE_URL;
+    let access_token = getCookie("huce_access_token");
+    let url = baseUrl + "/api/v1/users/bulk/activate-blockchain";
+
+    try {
+        const response = await axios.post(url, {
+            history_file_upload_id: historyFileUploadId,
+        }, {
+            headers: {
+                "Authorization": `Bearer ${access_token}`,
+                "Content-Type": "application/json",
+            },
+            skipLoadingInterceptor: true,
+        } as any);
+        return response.data;
+    } catch (error: any) {
+        // Không log error khi 409 vì đây là trường hợp bình thường (đã sync rồi)
+        if (error.response?.status !== 409) {
+            console.error("Failed to sync blockchain:", error);
+        }
+        throw error;
+    }
+}
+
+export const getBlockchainProgressApi = async (historyFileUploadId: string) => {
+    let baseUrl = process.env.NEXT_PUBLIC_AUTH_SERVICE_URL;
+    let access_token = getCookie("huce_access_token");
+    let url = baseUrl + `/api/v1/users/bulk/blockchain-progress/${historyFileUploadId}`;
+
+    try {
+        const response = await axios.get(url, {
+            headers: {
+                "Authorization": `Bearer ${access_token}`,
+            },
+            skipLoadingInterceptor: true,
+        } as any);
+        
+        // Log để debug
+        console.log("Blockchain Progress API response:", response.data);
+        
+        // Đảm bảo các field có giá trị mặc định nếu undefined
+        const data = response.data || {};
+        return {
+            history_file_upload_id: data.history_file_upload_id || historyFileUploadId,
+            status: data.status || "pending",
+            total: data.total ?? 0,
+            processed: data.processed ?? 0,
+            success: data.success ?? 0,
+            failed: data.failed ?? 0,
+            progress_percentage: data.progress_percentage,
+            message: data.message,
+        };
+    } catch (error: any) {
+        console.error("Failed to get blockchain progress:", error);
+        throw error;
+    }
+}

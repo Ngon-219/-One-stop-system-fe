@@ -1,16 +1,15 @@
 "use client"
 
-import { useEffect, useMemo, useState, useRef } from "react";
+import { useEffect, useMemo, useState, useCallback, useRef } from "react";
 import { Button, Form, Input, Select, Tabs, Typography, Spin } from "antd";
 import { createNewUserApi, getAllMajor } from "@/app/api/auth_service";
 import { major } from "@/app/api/interface/response/get_all_major";
 import { createNewUserReq } from "@/app/api/interface/request/create_new_user";
 import { createNewUserRes } from "@/app/api/interface/response/create_new_user";
 import Swal from "sweetalert2";
-import { io, Socket } from "socket.io-client";
-import { useAuth } from "@/app/context/AuthContext";
 import { notification } from "antd";
 import { useRouter } from "next/navigation";
+import { useSocket } from "@/app/hooks/useSocket";
 
 interface RegisterResult {
     status: string;
@@ -21,7 +20,7 @@ interface RegisterResult {
 
 const roleOptions = ["Admin", "Manager", "Student"];
 
-function extractDataFromRaw(rawData: any): RegisterResult | null {
+export function extractDataFromRaw(rawData: any): RegisterResult | null {
     console.log("extractDataFromRaw called with:", rawData);
     console.log("rawData type:", typeof rawData);
     
@@ -64,8 +63,6 @@ export default function CreateUserPage() {
     const [form] = Form.useForm();
     const [majors, setMajors] = useState<major[]>([]);
     const [loadingMajors, setLoadingMajors] = useState<boolean>(false);
-    const socketRef = useRef<Socket | null>(null);
-    const { user, isAuthenticated } = useAuth();
     const [api, contextHolder] = notification.useNotification();
     const router = useRouter();
 
@@ -88,83 +85,51 @@ export default function CreateUserPage() {
         fetchMajors();
     }, []);
 
+    // Lưu api vào ref để tránh stale closure
+    const apiRef = useRef(api);
     useEffect(() => {
-        if (!isAuthenticated || !user) {
-            return;
-        }
+        apiRef.current = api;
+    }, [api]);
 
-        const socketUrl = process.env.NEXT_PUBLIC_SOCKET_URL || "http://localhost:3003";
-        console.log("Connecting to socket server:", socketUrl);
-
-        const socket = io(socketUrl, {
-            transports: ["websocket", "polling"],
-            reconnection: true,
-            reconnectionDelay: 1000,
-            reconnectionAttempts: 5,
-        });
-
-        socketRef.current = socket;
-
-        socket.on("connect", () => {
-            console.log("Socket connected:", socket.id);
-            const roomId = `user:${user.user_id}`;
+    // Sử dụng useCallback để tạo stable callback
+    const handleSocketEvent = useCallback((data: any) => {
+        console.log("Received event:", data);
+        console.log("Event data type:", typeof data);
+        console.log("Event data:", JSON.stringify(data));
+        
+        const formatted_data = extractDataFromRaw(data);
+        console.log("Formatted data:", formatted_data);
+        
+        if (formatted_data) {
+            const isSuccess = formatted_data.status === "success";
+            const message = isSuccess 
+                ? `Người dùng ${formatted_data.email} đã được tạo thành công!`
+                : `Tạo người dùng ${formatted_data.email} thất bại!`;
             
-            socket.emit("join-room", {
-                room: roomId
-            });
-            
-            console.log("Joined room:", roomId);
-        });
-
-        socket.on("disconnect", (reason) => {
-            console.log("Socket disconnected:", reason);
-        });
-
-        socket.on("connect_error", (error) => {
-            console.error("Socket connection error:", error);
-        });
-
-        socket.on("event", (data: any) => {
-            console.log("Received event:", data);
-            console.log("Event data type:", typeof data);
-            console.log("Event data:", JSON.stringify(data));
-            
-            const formatted_data = extractDataFromRaw(data);
-            console.log("Formatted data:", formatted_data);
-            
-            if (formatted_data) {
-                const isSuccess = formatted_data.status === "success";
-                const message = isSuccess 
-                    ? `Người dùng ${formatted_data.email} đã được tạo thành công!`
-                    : `Tạo người dùng ${formatted_data.email} thất bại!`;
-                
+            // Sử dụng setTimeout để đưa notification ra khỏi render phase
+            setTimeout(() => {
                 if (isSuccess) {
-                    api.success({
+                    apiRef.current.success({
                         title: `Thông báo tạo người dùng`,
                         description: message,
                         placement: 'bottomRight',
                     });
                 } else {
-                    api.error({
+                    apiRef.current.error({
                         title: `Thông báo tạo người dùng`,
                         description: message,
                         placement: 'bottomRight',
                     });
                 }
-            } else {
-                console.log("formatted_data is null, cannot show notification");
-            }
-        });
+            }, 0);
+        } else {
+            console.log("formatted_data is null, cannot show notification");
+        }
+    }, []);
 
-        return () => {
-            socket.off("connect");
-            socket.off("disconnect");
-            socket.off("connect_error");
-            socket.off("event");
-            socket.disconnect();
-            socketRef.current = null;
-        };
-    }, [isAuthenticated, user?.user_id]);
+    useSocket({
+        onEvent: handleSocketEvent
+    });
 
     const majorOptions = useMemo(
         () => majors.map((m) => ({ label: m.name, value: m.major_id })),
