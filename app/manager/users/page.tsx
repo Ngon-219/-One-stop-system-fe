@@ -1,13 +1,13 @@
 "use client" 
-import { getUserPagination } from "@/app/api/auth_service";
+import { getUserPagination, deleteUserApi, getUserDetailApi } from "@/app/api/auth_service";
 import { getUserPaginationReq } from "@/app/api/interface/request/get_user";
 import { GetUserPaginationResponse, User } from "@/app/api/interface/response/get_user_pagination";
+import { GetUserDetailResponse } from "@/app/api/interface/response/get_user_detail";
 import NavBar from "@/app/components/navbar"
-import { Table, Button, Tooltip, Input, Select } from 'antd';
+import { Table, Button, Tooltip, Input, Select, Modal, Descriptions, Tag, Spin } from 'antd';
 import { useEffect, useState, useCallback, useRef } from "react";
 import { EyeOutlined, EditOutlined, DeleteOutlined } from '@ant-design/icons';
 import Swal from "sweetalert2";
-import { deleteUserApi } from "@/app/api/auth_service";
 import { DeleteUserResponse } from "@/app/api/interface/response/delete_user";
 import { useRouter } from "next/navigation";
 import { useSocket } from "@/app/hooks/useSocket";
@@ -34,6 +34,9 @@ export default function UserManagePage() {
     let [selectedRole, setSelectedRole] = useState<string | undefined>(undefined);
     const [api, contextHolder] = notification.useNotification();
     const router = useRouter();
+    const [isModalVisible, setIsModalVisible] = useState<boolean>(false);
+    const [userDetail, setUserDetail] = useState<GetUserDetailResponse | null>(null);
+    const [loadingDetail, setLoadingDetail] = useState<boolean>(false);
 
     // Lưu api vào ref để tránh stale closure
     const apiRef = useRef(api);
@@ -133,8 +136,30 @@ export default function UserManagePage() {
         fetchUsers();
     }, [])
 
-    const handleAction = (item: TableUser) => {
-        console.log("ID ẩn là:", item.userID); 
+    const handleAction = async (item: TableUser) => {
+        setIsModalVisible(true);
+        setLoadingDetail(true);
+        setUserDetail(null);
+        
+        try {
+            const detail = await getUserDetailApi(item.userID);
+            setUserDetail(detail);
+        } catch (error) {
+            console.error("Failed to fetch user detail:", error);
+            Swal.fire({
+                icon: "error",
+                title: "Lỗi",
+                text: "Không thể tải thông tin chi tiết người dùng!",
+            });
+            setIsModalVisible(false);
+        } finally {
+            setLoadingDetail(false);
+        }
+    };
+
+    const handleCloseModal = () => {
+        setIsModalVisible(false);
+        setUserDetail(null);
     };
 
 
@@ -307,6 +332,80 @@ export default function UserManagePage() {
                 className="w-[90vw] rounded-3xl shadow-xl"
                 scroll={{ x: 1000 }}
                 />
+            
+            <Modal
+                title="Chi tiết người dùng"
+                open={isModalVisible}
+                onCancel={handleCloseModal}
+                footer={[
+                    <Button key="close" onClick={handleCloseModal}>
+                        Đóng
+                    </Button>
+                ]}
+                width={800}
+            >
+                {loadingDetail ? (
+                    <div className="flex justify-center items-center py-12">
+                        <Spin size="large" />
+                    </div>
+                ) : userDetail ? (
+                    <Descriptions bordered column={2}>
+                        <Descriptions.Item label="Mã sinh viên" span={1}>
+                            {userDetail.student_code || "N/A"}
+                        </Descriptions.Item>
+                        <Descriptions.Item label="Họ và tên" span={1}>
+                            {userDetail.last_name} {userDetail.first_name}
+                        </Descriptions.Item>
+                        <Descriptions.Item label="Email" span={1}>
+                            {userDetail.email}
+                        </Descriptions.Item>
+                        <Descriptions.Item label="Số điện thoại" span={1}>
+                            {userDetail.phone_number}
+                        </Descriptions.Item>
+                        <Descriptions.Item label="CCCD" span={1}>
+                            {userDetail.cccd}
+                        </Descriptions.Item>
+                        <Descriptions.Item label="Vai trò" span={1}>
+                            <Tag color={userDetail.role === "Admin" ? "red" : userDetail.role === "Manager" ? "blue" : "green"}>
+                                {userDetail.role}
+                            </Tag>
+                        </Descriptions.Item>
+                        <Descriptions.Item label="Địa chỉ" span={2}>
+                            {userDetail.address}
+                        </Descriptions.Item>
+                        <Descriptions.Item label="Chuyên ngành" span={2}>
+                            {userDetail.major_names && userDetail.major_names.length > 0 ? (
+                                <div className="flex flex-wrap gap-2">
+                                    {userDetail.major_names.map((major, index) => (
+                                        <Tag key={index} color="cyan">{major}</Tag>
+                                    ))}
+                                </div>
+                            ) : "N/A"}
+                        </Descriptions.Item>
+                        <Descriptions.Item label="Wallet Address" span={2}>
+                            <code className="bg-gray-100 px-2 py-1 rounded text-sm">
+                                {userDetail.wallet_address || "N/A"}
+                            </code>
+                        </Descriptions.Item>
+                        <Descriptions.Item label="Ưu tiên" span={1}>
+                            <Tag color={userDetail.is_priority ? "orange" : "default"}>
+                                {userDetail.is_priority ? "Có" : "Không"}
+                            </Tag>
+                        </Descriptions.Item>
+                        <Descriptions.Item label="Lần đầu đăng nhập" span={1}>
+                            <Tag color={userDetail.is_first_login ? "purple" : "default"}>
+                                {userDetail.is_first_login ? "Có" : "Không"}
+                            </Tag>
+                        </Descriptions.Item>
+                        <Descriptions.Item label="Ngày tạo" span={1}>
+                            {userDetail.created_at ? new Date(userDetail.created_at).toLocaleString('vi-VN') : "N/A"}
+                        </Descriptions.Item>
+                        <Descriptions.Item label="Ngày cập nhật" span={1}>
+                            {userDetail.updated_at ? new Date(userDetail.updated_at).toLocaleString('vi-VN') : "N/A"}
+                        </Descriptions.Item>
+                    </Descriptions>
+                ) : null}
+            </Modal>
         </div>
     )
 }

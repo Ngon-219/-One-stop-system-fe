@@ -14,6 +14,7 @@ import { createNewUserReq } from "./interface/request/create_new_user";
 import { createNewUserRes } from "./interface/response/create_new_user";
 import { gettUploadHistoryReq } from "./interface/request/upload_history";
 import { GetUploadHistoryResponse } from "./interface/response/get_upload_history";
+import { GetUserDetailResponse } from "./interface/response/get_user_detail";
 
 export const loginNotMfaApi = async (request: LoginRequest) => {
     const baseUrl = process.env.NEXT_PUBLIC_AUTH_SERVICE_URL;
@@ -443,6 +444,24 @@ export const getBlockchainProgressApi = async (historyFileUploadId: string) => {
         };
     } catch (error: any) {
         console.error("Failed to get blockchain progress:", error);
+        throw error;
+    }
+}
+
+export const getUserDetailApi = async (userId: string): Promise<GetUserDetailResponse> => {
+    let baseUrl = process.env.NEXT_PUBLIC_AUTH_SERVICE_URL;
+    let url = baseUrl + `/api/v1/users/${userId}`;
+    let access_token = getCookie("huce_access_token");
+    
+    try {
+        const response = await axios.get(url, {
+            headers: {
+                "Authorization": `Bearer ${access_token}`
+            }
+        });
+        return response.data;
+    } catch (error: any) {
+        console.error("Failed to get user detail:", error);
         throw error;
     }
 }
