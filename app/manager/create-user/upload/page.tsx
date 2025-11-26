@@ -12,6 +12,7 @@ import type { UploadFile } from 'antd';
 import { useLoading } from "@/app/context/LoadingContext";
 import { useSocket } from "@/app/hooks/useSocket";
 import { extractDataFromRaw } from "../page";
+import ManagerNavBar from "@/app/components/manager-navbar";
 
 interface TableUploadHistory {
     key: string;
@@ -597,6 +598,7 @@ export default function UploadPageManager() {
         <div className="h-full w-full flex flex-col items-center justify-center">
             {contextHolder}
             <NavBar />
+            <ManagerNavBar />
             <div className="w-[90vw] flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between mb-4">
                 <Select
                     placeholder="Lọc theo trạng thái"

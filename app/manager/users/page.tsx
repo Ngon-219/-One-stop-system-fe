@@ -7,6 +7,7 @@ import { UpdateUserRequest } from "@/app/api/interface/request/update_user";
 import { UpdateUserResponse } from "@/app/api/interface/response/update_user";
 import { major } from "@/app/api/interface/response/get_all_major";
 import NavBar from "@/app/components/navbar"
+import ManagerNavBar from "@/app/components/manager-navbar"
 import { Table, Button, Tooltip, Input, Select, Modal, Descriptions, Tag, Spin, Form } from 'antd';
 import { useEffect, useState, useCallback, useRef, useMemo } from "react";
 import { EyeOutlined, EditOutlined, DeleteOutlined } from '@ant-design/icons';
@@ -404,6 +405,7 @@ export default function UserManagePage() {
         <div className="h-full w-full flex flex-col items-center justify-center">
             {contextHolder}
             <NavBar />
+            <ManagerNavBar />
             <div className="w-[90vw] flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between mb-4">
                 <Select
                     placeholder="Lọc theo vai trò"
