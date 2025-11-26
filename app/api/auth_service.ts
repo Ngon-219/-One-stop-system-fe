@@ -299,3 +299,35 @@ export const getUploadHistoryApi = async (req: gettUploadHistoryReq) => {
 
     return response;
 }
+
+export const uploadChunkApi = async (
+    fileName: string,
+    chunkNumber: number,
+    totalChunks: number,
+    chunk: Blob
+) => {
+    let baseUrl = process.env.NEXT_PUBLIC_AUTH_SERVICE_URL;
+    let access_token = getCookie("huce_access_token");
+    let url = baseUrl + "/api/v1/upload/chunk";
+
+    const formData = new FormData();
+    formData.append('fileName', fileName);
+    formData.append('chunkNumber', String(chunkNumber));
+    formData.append('totalChunks', String(totalChunks));
+    formData.append('chunk', chunk, `${fileName}.part${chunkNumber}`);
+
+    try {
+        const response = await axios.post(url, formData, {
+            headers: {
+                "Authorization": `Bearer ${access_token}`,
+                "Content-Type": "multipart/form-data",
+            },
+            
+            skipLoadingInterceptor: true,
+        } as any);
+        return response.data;
+    } catch (error: any) {
+        console.error("Failed to upload chunk:", error);
+        throw error;
+    }
+}

@@ -45,22 +45,34 @@ const ensureInterceptors = () => {
 
   axios.interceptors.request.use(
     (config) => {
+      // Bỏ qua loading nếu request có flag skipLoadingInterceptor
+      if ((config as any).skipLoadingInterceptor) {
+        return config;
+      }
       increment();
       return config;
     },
     (error) => {
-      decrement();
+      if (!(error.config as any)?.skipLoadingInterceptor) {
+        decrement();
+      }
       return Promise.reject(error);
     }
   );
 
   axios.interceptors.response.use(
     (response) => {
+      // Bỏ qua loading nếu request có flag skipLoadingInterceptor
+      if ((response.config as any).skipLoadingInterceptor) {
+        return response;
+      }
       decrement();
       return response;
     },
     (error) => {
-      decrement();
+      if (!(error.config as any)?.skipLoadingInterceptor) {
+        decrement();
+      }
       return Promise.reject(error);
     }
   );
