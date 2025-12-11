@@ -74,12 +74,13 @@ const ResetPasswordPage = () => {
                                 Email
                             </label>
                             <input
+                                disabled
                                 id="email"
                                 type="email"
                                 placeholder="Nhập email của bạn"
                                 value={email}
                                 onChange={(e) => setEmail(e.target.value)}
-                                className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all duration-200 bg-gray-50 hover:bg-white text-gray-800 placeholder-gray-400"
+                                className="opacity-50 cursor-not-allowed w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all duration-200 bg-gray-50 hover:bg-white text-gray-800 placeholder-gray-400"
                             />
                         </div>
 

@@ -11,6 +11,7 @@ import { notification } from "antd";
 import { useRouter } from "next/navigation";
 import { useSocket } from "@/app/hooks/useSocket";
 import ManagerNavBar from "@/app/components/manager-navbar";
+import NavBar from "@/app/components/navbar";
 
 interface RegisterResult {
     status: string;
@@ -267,6 +268,7 @@ export default function CreateUserPage() {
     return (
         <div className="min-h-screen flex flex-col items-center py-8 px-4">
             {contextHolder}
+            <NavBar />
             <ManagerNavBar />
             <Typography.Title level={2}>Tạo người dùng</Typography.Title>
             <div className="w-full max-w-5xl bg-white p-6 rounded-2xl shadow">

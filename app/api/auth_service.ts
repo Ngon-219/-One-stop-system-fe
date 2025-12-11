@@ -33,6 +33,8 @@ import { CreateRequestRequest } from "./interface/request/create_request";
 import { RequestResponse, RequestListResponse } from "./interface/response/request";
 import { ScheduleRequestRequest } from "./interface/request/schedule_request";
 import { ScheduleRequestResponse } from "./interface/response/schedule_request";
+import { CreateCertificateRequest } from "./interface/request/create_certificate";
+import { CreateCertificateResponse } from "./interface/response/create_certificate";
 
 export const loginNotMfaApi = async (request: LoginRequest) => {
     const baseUrl = process.env.NEXT_PUBLIC_AUTH_SERVICE_URL;
@@ -953,6 +955,25 @@ export const getDocumentStatsApi = async (startDate: string, endDate: string): P
         return response.data;
     } catch (error: any) {
         console.error("Failed to get document stats:", error);
+        throw error;
+    }
+}
+
+export const createCertificateApi = async (request: CreateCertificateRequest): Promise<CreateCertificateResponse> => {
+    const baseUrl = process.env.NEXT_PUBLIC_AUTH_SERVICE_URL;
+    const access_token = getCookie("huce_access_token");
+    const url = `${baseUrl}/api/v1/documents/mock/certificate`;
+
+    try {
+        const response = await axios.post(url, request, {
+            headers: {
+                "Authorization": `Bearer ${access_token}`,
+                "Content-Type": "application/json",
+            },
+        });
+        return response.data;
+    } catch (error: any) {
+        console.error("Failed to create certificate:", error);
         throw error;
     }
 }

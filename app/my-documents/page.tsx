@@ -1,15 +1,17 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/app/context/AuthContext";
-import { Table, Tag, Button, Modal, Card, Spin, Select } from "antd";
+import { Table, Tag, Button, Modal, Card, Spin, Select, Alert } from "antd";
 import { EyeOutlined } from "@ant-design/icons";
 import Swal from "sweetalert2";
 import NavBar from "@/app/components/navbar";
 import StudentNavBar from "@/app/components/student-navbar";
-import { getMyDocumentsApi } from "@/app/api/document_service";
-import { DocumentResponse, DocumentStatus } from "@/app/api/interface/response/get_documents";
+import { getDocumentByIdApi, getMyDocumentsApi } from "@/app/api/document_service";
+import { DocumentResponse, DocumentStatus, PdfSchemaPayload } from "@/app/api/interface/response/get_documents";
+import { generate } from "@pdfme/generator";
+import { barcodes, text, multiVariableText, image, svg, table as tablePlugin, line, rectangle, ellipse } from "@pdfme/schemas";
 import dayjs from "dayjs";
 
 const statusLabelMap: Record<string, string> = {
@@ -68,6 +70,33 @@ export default function MyDocumentsPage() {
     const [statusFilter, setStatusFilter] = useState<DocumentStatus | undefined>(undefined);
     const [sortField, setSortField] = useState<"created_at" | "updated_at" | "issued_at">("created_at");
     const [sortOrder, setSortOrder] = useState<"ASC" | "DESC">("DESC");
+    const [previewVisible, setPreviewVisible] = useState(false);
+    const [previewLoading, setPreviewLoading] = useState(false);
+    const [previewError, setPreviewError] = useState<string | null>(null);
+    const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+    const [previewDocument, setPreviewDocument] = useState<DocumentResponse | null>(null);
+
+    const pdfPlugins = useMemo(() => {
+        const basePlugins: Record<string, any> = {
+            text,
+            multiVariableText,
+            image,
+            svg,
+            table: tablePlugin,
+            line,
+            rectangle,
+            ellipse,
+        };
+        if (barcodes?.qrcode) {
+            basePlugins.qrcode = barcodes.qrcode;
+        }
+        return basePlugins;
+    }, []);
+
+    const ipfsGateway = useMemo(() => {
+        const base = process.env.NEXT_PUBLIC_IPFS_GATEWAY_URL || "https://ipfs.io/ipfs/";
+        return base.endsWith("/") ? base : `${base}/`;
+    }, []);
 
     useEffect(() => {
         if (!loading && !isAuthenticated) {
@@ -105,6 +134,53 @@ export default function MyDocumentsPage() {
             });
         } finally {
             setLoadingDocuments(false);
+        }
+    };
+
+    const buildPdfPreview = async (schema: PdfSchemaPayload): Promise<string> => {
+        const pdfBuffer = await generate({
+            template: schema.template,
+            inputs: schema.inputs || [],
+            plugins: pdfPlugins,
+        });
+        const blob = new Blob([pdfBuffer], { type: "application/pdf" });
+        return URL.createObjectURL(blob);
+    };
+
+    const handleClosePreview = () => {
+        setPreviewVisible(false);
+        if (previewUrl?.startsWith("blob:")) {
+            URL.revokeObjectURL(previewUrl);
+        }
+        setPreviewUrl(null);
+        setPreviewDocument(null);
+        setPreviewError(null);
+    };
+
+    const handleViewDocument = async (record: DocumentResponse) => {
+        setPreviewVisible(true);
+        setPreviewLoading(true);
+        setPreviewError(null);
+        setPreviewUrl(null);
+        setPreviewDocument(null);
+        try {
+            const detail = await getDocumentByIdApi(record.document_id);
+            setPreviewDocument(detail);
+
+            if (detail.pdf_schema?.template && detail.pdf_schema?.inputs) {
+                const url = await buildPdfPreview(detail.pdf_schema);
+                setPreviewUrl(url);
+            } else if (detail.pdf_ipfs_hash) {
+                const url = `${ipfsGateway}${detail.pdf_ipfs_hash}`;
+                setPreviewUrl(url);
+            } else {
+                setPreviewError("Tài liệu này chưa có dữ liệu PDF để xem trước.");
+            }
+        } catch (error: any) {
+            console.error("Failed to load document detail:", error);
+            setPreviewError(error.response?.data?.message || "Không thể tải chi tiết tài liệu!");
+        } finally {
+            setPreviewLoading(false);
         }
     };
 
@@ -163,37 +239,7 @@ export default function MyDocumentsPage() {
                 <Button
                     type="link"
                     icon={<EyeOutlined />}
-                    onClick={() => {
-                        Modal.info({
-                            title: "Chi tiết tài liệu",
-                            width: 700,
-                            content: (
-                                <div className="mt-4 space-y-2">
-                                    <p><strong>ID:</strong> {record.document_id}</p>
-                                    <p><strong>Loại tài liệu:</strong> {record.documentType?.document_type_name || "-"}</p>
-                                    <p><strong>Trạng thái:</strong> <Tag color={statusColorMap[record.status] || "default"}>{statusLabelMap[record.status] || record.status}</Tag></p>
-                                    <p><strong>Hợp lệ:</strong> {record.is_valid ? "Có" : "Không"}</p>
-                                    {record.issued_at && (
-                                        <p><strong>Ngày phát hành:</strong> {dayjs(record.issued_at).format("DD/MM/YYYY HH:mm")}</p>
-                                    )}
-                                    {record.verified_at && (
-                                        <p><strong>Ngày xác thực:</strong> {dayjs(record.verified_at).format("DD/MM/YYYY HH:mm")}</p>
-                                    )}
-                                    {record.token_id && (
-                                        <p><strong>Token ID:</strong> <span className="font-mono text-xs">{record.token_id}</span></p>
-                                    )}
-                                    {record.tx_hash && (
-                                        <p><strong>Transaction Hash:</strong> <span className="font-mono text-xs">{record.tx_hash.substring(0, 20)}...</span></p>
-                                    )}
-                                    {record.ipfs_hash && (
-                                        <p><strong>IPFS Hash:</strong> <span className="font-mono text-xs">{record.ipfs_hash.substring(0, 20)}...</span></p>
-                                    )}
-                                    <p><strong>Ngày tạo:</strong> {dayjs(record.created_at).format("DD/MM/YYYY HH:mm")}</p>
-                                    <p><strong>Ngày cập nhật:</strong> {dayjs(record.updated_at).format("DD/MM/YYYY HH:mm")}</p>
-                                </div>
-                            ),
-                        });
-                    }}
+                    onClick={() => handleViewDocument(record)}
                 >
                     Xem
                 </Button>
@@ -270,6 +316,72 @@ export default function MyDocumentsPage() {
                     />
                 </Card>
             </div>
+
+            <Modal
+                open={previewVisible}
+                title="Xem trước tài liệu"
+                onCancel={handleClosePreview}
+                footer={null}
+                width="90vw"
+                styles={{ body: { maxHeight: "80vh", overflow: "auto" } }}
+            >
+                {previewLoading ? (
+                    <div className="flex justify-center py-10">
+                        <Spin size="large" />
+                    </div>
+                ) : previewError ? (
+                    <Alert type="error" message="Lỗi" description={previewError} />
+                ) : (
+                    <>
+                        <div className="mb-4 space-y-1 text-sm text-gray-700">
+                            {previewDocument && (
+                                <>
+                                    <div><strong>ID:</strong> {previewDocument.document_id}</div>
+                                    <div><strong>Loại tài liệu:</strong> {previewDocument.documentType?.document_type_name || "-"}</div>
+                                    <div>
+                                        <strong>Trạng thái:</strong>{" "}
+                                        <Tag color={statusColorMap[previewDocument.status] || "default"}>
+                                            {statusLabelMap[previewDocument.status] || previewDocument.status}
+                                        </Tag>
+                                    </div>
+                                    <div><strong>Ngày tạo:</strong> {dayjs(previewDocument.created_at).format("DD/MM/YYYY HH:mm")}</div>
+                                    <div><strong>Ngày cập nhật:</strong> {dayjs(previewDocument.updated_at).format("DD/MM/YYYY HH:mm")}</div>
+                                    {previewDocument.issued_at && (
+                                        <div><strong>Ngày phát hành:</strong> {dayjs(previewDocument.issued_at).format("DD/MM/YYYY HH:mm")}</div>
+                                    )}
+                                    {previewDocument.tx_hash && (
+                                        <div><strong>Tx Hash:</strong> <span className="font-mono text-xs">{previewDocument.tx_hash}</span></div>
+                                    )}
+                                    {previewDocument.ipfs_hash && (
+                                        <div>
+                                            <strong>IPFS Hash:</strong>{" "}
+                                            <a
+                                                href={`${ipfsGateway}${previewDocument.ipfs_hash}`}
+                                                target="_blank"
+                                                rel="noopener noreferrer"
+                                                className="font-mono text-xs text-blue-600 hover:underline break-all"
+                                            >
+                                                {previewDocument.ipfs_hash}
+                                            </a>
+                                        </div>
+                                    )}
+                                </>
+                            )}
+                        </div>
+
+                        {previewUrl ? (
+                            <iframe
+                                src={previewUrl}
+                                title="PDF Preview"
+                                className="w-full"
+                                style={{ minHeight: "70vh", border: "1px solid #e5e7eb", borderRadius: "8px" }}
+                            />
+                        ) : (
+                            <Alert type="info" message="Chưa có nội dung PDF để hiển thị." />
+                        )}
+                    </>
+                )}
+            </Modal>
         </div>
     );
 }

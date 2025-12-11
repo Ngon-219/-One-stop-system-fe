@@ -11,6 +11,7 @@ import {
     ApartmentOutlined,
     ClusterOutlined,
     InboxOutlined,
+    FileAddOutlined,
 } from "@ant-design/icons";
 import type { MenuProps } from "antd";
 
@@ -41,6 +42,11 @@ const menuItems: MenuProps["items"] = [
         label: "Xử lý tài liệu",
     },
     {
+        key: "/manager/certificates/create",
+        icon: <FileAddOutlined />,
+        label: "Tạo chứng chỉ",
+    },
+    {
         key: "/manager/departments",
         icon: <ApartmentOutlined />,
         label: "Khoa/Phòng ban",
@@ -68,6 +74,8 @@ export const ManagerNavBar = () => {
     // Xác định selected key dựa trên pathname
     const selectedKey = pathname?.startsWith("/manager/create-user") 
         ? "/manager/create-user" 
+        : pathname?.startsWith("/manager/certificates/create")
+        ? "/manager/certificates/create"
         : pathname || "/manager/dashboard";
 
     return (

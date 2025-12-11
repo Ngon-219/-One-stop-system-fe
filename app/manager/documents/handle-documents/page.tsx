@@ -86,6 +86,7 @@ export default function HandleDocumentsPage() {
     const formRef = useRef<PdfForm | null>(null);
     const originalSchemaRef = useRef<PdfSchemaPayload | null>(null);
     const formInputsRef = useRef<Record<string, any>[]>([]);
+    const router = useRouter();
 
     const pdfPlugins = useMemo(() => {
         const basePlugins: Record<string, any> = {
@@ -668,8 +669,11 @@ export default function HandleDocumentsPage() {
                         )}
                         {selectedDocument.metadata && (
                             <Descriptions.Item label="Metadata">
-                                <div className="max-h-48 overflow-auto bg-gray-50 p-3 rounded">
-                                    <pre className="text-xs">
+                                <div 
+                                    className="max-h-48 overflow-x-auto overflow-y-auto bg-gray-50 p-3 rounded"
+                                    style={{ maxWidth: "100%" }}
+                                >
+                                    <pre className="text-xs whitespace-pre-wrap">
                                         {JSON.stringify(selectedDocument.metadata, null, 2)}
                                     </pre>
                                 </div>

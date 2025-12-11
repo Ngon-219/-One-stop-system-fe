@@ -178,7 +178,8 @@ export default function DocumentManagerPage() {
                         Đóng
                     </Button>
                 ]}
-                width={700}
+                width="90vw"
+                styles={{ body: { maxHeight: "85vh", overflow: "auto" } }}
             >
                 {loadingDetail ? (
                     <div className="flex justify-center items-center py-12">
@@ -198,9 +199,12 @@ export default function DocumentManagerPage() {
                             </Tag>
                         </Descriptions.Item>
                         {selectedDocument.template_pdf && (
-                            <Descriptions.Item label="Template JSON">
-                                <div className="max-h-40 overflow-auto bg-gray-50 p-2 rounded">
-                                    <pre className="text-xs">
+                            <Descriptions.Item label="Preview Template">
+                                <div
+                                    className="max-h-40 overflow-x-auto overflow-y-auto bg-gray-50 p-2 rounded"
+                                    style={{ maxWidth: "80vw" }}
+                                >
+                                    <pre className="text-xs whitespace-pre">
                                         {JSON.stringify(JSON.parse(selectedDocument.template_pdf), null, 2)}
                                     </pre>
                                 </div>

@@ -1,14 +1,17 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState, useEffect } from "react";
 import { Card, Upload, Button, Descriptions, Tag, Spin, Alert, Image, Input, Space } from "antd";
-import { UploadOutlined, QrcodeOutlined, SearchOutlined } from "@ant-design/icons";
+import { UploadOutlined, QrcodeOutlined, SearchOutlined, LoginOutlined } from "@ant-design/icons";
+import Link from "next/link";
 import type { UploadProps } from "antd";
 import { getPublicDocumentInfoApi } from "@/app/api/document_service";
 import Swal from "sweetalert2";
 import dayjs from "dayjs";
 // @ts-ignore - jsqr doesn't have types
 import jsQR from "jsqr";
+import { generate } from "@pdfme/generator";
+import { barcodes, text, multiVariableText, image, svg, table as tablePlugin, line, rectangle, ellipse } from "@pdfme/schemas";
 
 const statusLabelMap: Record<string, string> = {
     draft: "Nháp",
@@ -32,11 +35,47 @@ const statusColorMap: Record<string, string> = {
     failed: "volcano",
 };
 
+interface IpfsMetadata {
+    name: string;
+    description: string;
+    image: string;
+    attributes: Array<{
+        trait_type: string;
+        value: string;
+    }>;
+}
+
 export default function VerifyPage() {
     const [loading, setLoading] = useState<boolean>(false);
     const [documentInfo, setDocumentInfo] = useState<any>(null);
     const [documentId, setDocumentId] = useState<string>("");
     const [imageUrl, setImageUrl] = useState<string>("");
+    const [ipfsMetadata, setIpfsMetadata] = useState<IpfsMetadata | null>(null);
+    const [loadingMetadata, setLoadingMetadata] = useState<boolean>(false);
+    const [pdfPreviewUrl, setPdfPreviewUrl] = useState<string | null>(null);
+    const [loadingPdf, setLoadingPdf] = useState<boolean>(false);
+    
+    const ipfsGateway = useMemo(() => {
+        const base = process.env.NEXT_PUBLIC_IPFS_GATEWAY_URL || "https://ipfs.io/ipfs/";
+        return base.endsWith("/") ? base : `${base}/`;
+    }, []);
+
+    const pdfPlugins = useMemo(() => {
+        const basePlugins: Record<string, any> = {
+            text,
+            multiVariableText,
+            image,
+            svg,
+            table: tablePlugin,
+            line,
+            rectangle,
+            ellipse,
+        };
+        if (barcodes?.qrcode) {
+            basePlugins.qrcode = barcodes.qrcode;
+        }
+        return basePlugins;
+    }, []);
 
     const decodeQRFromImage = (file: File): Promise<string | null> => {
         return new Promise((resolve, reject) => {
@@ -117,11 +156,98 @@ export default function VerifyPage() {
         }
     };
 
+    const fetchIpfsMetadata = async (ipfsHash: string) => {
+        if (!ipfsHash) return;
+        
+        setLoadingMetadata(true);
+        setIpfsMetadata(null);
+        try {
+            const url = `${ipfsGateway}${ipfsHash}`;
+            const response = await fetch(url);
+            if (!response.ok) {
+                throw new Error("Failed to fetch IPFS metadata");
+            }
+            const data: IpfsMetadata = await response.json();
+            setIpfsMetadata(data);
+        } catch (error: any) {
+            console.error("Failed to fetch IPFS metadata:", error);
+            // Không hiển thị lỗi cho user vì có thể IPFS hash không phải metadata
+        } finally {
+            setLoadingMetadata(false);
+        }
+    };
+
+    const buildPdfPreview = async (schema: any): Promise<string> => {
+        const pdfBuffer = await generate({
+            template: schema.template,
+            inputs: schema.inputs || [],
+            plugins: pdfPlugins,
+        });
+        const blob = new Blob([pdfBuffer], { type: "application/pdf" });
+        return URL.createObjectURL(blob);
+    };
+
+    const loadPdfPreview = async (info: any) => {
+        setLoadingPdf(true);
+        setPdfPreviewUrl(null);
+        
+        // Cleanup old blob URL if exists
+        if (pdfPreviewUrl?.startsWith("blob:")) {
+            URL.revokeObjectURL(pdfPreviewUrl);
+        }
+
+        try {
+            // Priority 1: Generate from pdf_schema if available
+            if (info.document?.pdf_schema?.template) {
+                const url = await buildPdfPreview(info.document.pdf_schema);
+                setPdfPreviewUrl(url);
+                return;
+            }
+            
+            // Priority 2: Use pdf_ipfs_hash if available
+            if (info.document?.pdf_ipfs_hash) {
+                const url = `${ipfsGateway}${info.document.pdf_ipfs_hash}`;
+                setPdfPreviewUrl(url);
+                return;
+            }
+            
+            // Priority 3: Try to use ipfs_hash as PDF (might be PDF file)
+            if (info.document?.ipfs_hash) {
+                const url = `${ipfsGateway}${info.document.ipfs_hash}`;
+                // Try to fetch to check if it's a PDF
+                try {
+                    const response = await fetch(url, { method: "HEAD" });
+                    const contentType = response.headers.get("content-type");
+                    if (contentType?.includes("pdf") || contentType?.includes("application")) {
+                        setPdfPreviewUrl(url);
+                        return;
+                    }
+                } catch (e) {
+                    // Ignore error, might not be PDF
+                }
+            }
+        } catch (error: any) {
+            console.error("Failed to load PDF preview:", error);
+        } finally {
+            setLoadingPdf(false);
+        }
+    };
+
     const fetchDocumentInfo = async (docId: string) => {
         setLoading(true);
+        setIpfsMetadata(null);
+        setPdfPreviewUrl(null);
         try {
             const info = await getPublicDocumentInfoApi(docId);
             setDocumentInfo(info);
+            
+            // Fetch IPFS metadata nếu có ipfs_hash
+            if (info.document?.ipfs_hash) {
+                await fetchIpfsMetadata(info.document.ipfs_hash);
+            }
+            
+            // Load PDF preview
+            await loadPdfPreview(info);
         } catch (error: any) {
             console.error("Failed to fetch document info:", error);
             Swal.fire({
@@ -147,13 +273,29 @@ export default function VerifyPage() {
         fetchDocumentInfo(documentId.trim());
     };
 
+    // Cleanup blob URL on unmount
+    useEffect(() => {
+        return () => {
+            if (pdfPreviewUrl?.startsWith("blob:")) {
+                URL.revokeObjectURL(pdfPreviewUrl);
+            }
+        };
+    }, [pdfPreviewUrl]);
+
     return (
         <div className="w-full min-h-screen bg-gray-50 py-8">
             <div className="w-[90vw] mx-auto">
                 <Card className="mb-6">
-                    <div className="mb-6">
-                        <h1 className="text-3xl font-bold text-gray-800 mb-2">Xác thực tài liệu</h1>
-                        <p className="text-gray-600">Upload ảnh QR code hoặc nhập Document ID để xem thông tin tài liệu</p>
+                    <div className="mb-6 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                        <div>
+                            <h1 className="text-3xl font-bold text-gray-800 mb-2">Xác thực tài liệu</h1>
+                            <p className="text-gray-600">Upload ảnh QR code hoặc nhập Document ID để xem thông tin tài liệu</p>
+                        </div>
+                        <Link href="/login">
+                            <Button type="primary" icon={<LoginOutlined />} size="large">
+                                Đăng nhập
+                            </Button>
+                        </Link>
                     </div>
 
                     <Space direction="vertical" size="large" className="w-full">
@@ -260,7 +402,14 @@ export default function VerifyPage() {
                                     )}
                                     {documentInfo.document?.ipfs_hash && (
                                         <Descriptions.Item label="IPFS Hash">
-                                            <span className="font-mono text-xs break-all">{documentInfo.document.ipfs_hash}</span>
+                                            <a
+                                                href={`${ipfsGateway}${documentInfo.document.ipfs_hash}`}
+                                                target="_blank"
+                                                rel="noopener noreferrer"
+                                                className="font-mono text-xs break-all text-blue-600 hover:underline"
+                                            >
+                                                {documentInfo.document.ipfs_hash}
+                                            </a>
                                         </Descriptions.Item>
                                     )}
                                 </Descriptions>
@@ -346,6 +495,92 @@ export default function VerifyPage() {
                                             </>
                                         )}
                                     </Descriptions>
+                                </div>
+                            )}
+
+                            {/* IPFS Metadata */}
+                            {documentInfo.document?.ipfs_hash && (
+                                <div>
+                                    <h2 className="text-xl font-bold mb-4">Thông tin Metadata từ IPFS</h2>
+                                    {loadingMetadata ? (
+                                        <div className="flex justify-center py-4">
+                                            <Spin />
+                                        </div>
+                                    ) : ipfsMetadata ? (
+                                        <div className="space-y-4">
+                                            {ipfsMetadata.name && (
+                                                <Descriptions bordered column={1}>
+                                                    <Descriptions.Item label="Tên">
+                                                        {ipfsMetadata.name}
+                                                    </Descriptions.Item>
+                                                    {ipfsMetadata.description && (
+                                                        <Descriptions.Item label="Mô tả">
+                                                            {ipfsMetadata.description}
+                                                        </Descriptions.Item>
+                                                    )}
+                                                    {ipfsMetadata.image && (
+                                                        <Descriptions.Item label="Hình ảnh">
+                                                            <a
+                                                                href={ipfsMetadata.image}
+                                                                target="_blank"
+                                                                rel="noopener noreferrer"
+                                                                className="text-blue-600 hover:underline"
+                                                            >
+                                                                Xem hình ảnh
+                                                            </a>
+                                                        </Descriptions.Item>
+                                                    )}
+                                                </Descriptions>
+                                            )}
+                                            {ipfsMetadata.attributes && ipfsMetadata.attributes.length > 0 && (
+                                                <div>
+                                                    <h3 className="text-lg font-semibold mb-2">Thuộc tính</h3>
+                                                    <Descriptions bordered column={2}>
+                                                        {ipfsMetadata.attributes.map((attr, index) => (
+                                                            <Descriptions.Item key={index} label={attr.trait_type}>
+                                                                {attr.value}
+                                                            </Descriptions.Item>
+                                                        ))}
+                                                    </Descriptions>
+                                                </div>
+                                            )}
+                                        </div>
+                                    ) : (
+                                        <Alert
+                                            type="info"
+                                            message="Không thể tải metadata từ IPFS"
+                                            description="IPFS hash có thể không chứa metadata hoặc gateway không khả dụng."
+                                            showIcon
+                                        />
+                                    )}
+                                </div>
+                            )}
+
+                            {/* PDF Preview */}
+                            {(pdfPreviewUrl || loadingPdf) && (
+                                <div>
+                                    <h2 className="text-xl font-bold mb-4">Xem trước PDF</h2>
+                                    {loadingPdf ? (
+                                        <div className="flex justify-center py-8">
+                                            <Spin size="large" />
+                                        </div>
+                                    ) : pdfPreviewUrl ? (
+                                        <div className="border rounded-lg overflow-hidden">
+                                            <iframe
+                                                src={pdfPreviewUrl}
+                                                title="PDF Preview"
+                                                className="w-full"
+                                                style={{ minHeight: "70vh", border: "none" }}
+                                            />
+                                        </div>
+                                    ) : (
+                                        <Alert
+                                            type="info"
+                                            message="Không có PDF để hiển thị"
+                                            description="Tài liệu này chưa có file PDF để xem trước."
+                                            showIcon
+                                        />
+                                    )}
                                 </div>
                             )}
                         </div>

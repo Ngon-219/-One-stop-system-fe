@@ -63,6 +63,40 @@ export default function ProfilePage() {
         checkMfaStatus();
     }, []);
 
+    const getBlockchainRoleName = (role: number | string | null | undefined): string => {
+        if (role === null || role === undefined) return "N/A";
+        
+        const roleMap: Record<number, string> = {
+            0: "NONE",
+            1: "STUDENT",
+            2: "TEACHER",
+            3: "ADMIN",
+            4: "MANAGER",
+        };
+        
+        const roleNum = typeof role === "string" ? parseInt(role, 10) : role;
+        if (isNaN(roleNum)) return String(role);
+        
+        return roleMap[roleNum] || `UNKNOWN (${roleNum})`;
+    };
+
+    const getBlockchainRoleColor = (role: number | string | null | undefined): string => {
+        if (role === null || role === undefined) return "default";
+        
+        const roleNum = typeof role === "string" ? parseInt(role, 10) : role;
+        if (isNaN(roleNum)) return "default";
+        
+        const colorMap: Record<number, string> = {
+            0: "default", 
+            1: "blue",  
+            2: "cyan",  
+            3: "red",   
+            4: "orange",
+        };
+        
+        return colorMap[roleNum] || "default";
+    };
+
     const renderStatusTag = (label: string, value: boolean | string | number) => {
         if (typeof value === "boolean") {
             return <Tag color={value ? "green" : "red"}>{label}: {value ? "Có" : "Không"}</Tag>;
@@ -146,8 +180,6 @@ export default function ProfilePage() {
             const qrPayload = await buildQrCodeDataUrl(res?.qrCode);
             setMfaQr(qrPayload);
             messageApi.success(res?.message || "Kích hoạt MFA thành công.");
-            // Update MFA status after successful enable
-            setMfaEnabled(true);
         } catch (err: any) {
             messageApi.error(err.response?.data?.message || "Không thể xác minh OTP.");
         } finally {
@@ -247,7 +279,9 @@ export default function ProfilePage() {
                                 {renderStatusTag("Lần đăng nhập đầu tiên", profile.user.is_first_login)}
                                 {renderStatusTag("Tình trạng", profile.user.status)}
                                 {renderStatusTag("Hoạt động", profile.is_active)}
-                                {renderStatusTag("Blockchain role", profile.blockchain_role)}
+                                <Tag color={getBlockchainRoleColor(profile.blockchain_role)}>
+                                    Blockchain role: {getBlockchainRoleName(profile.blockchain_role)}
+                                </Tag>
                             </div>
                             <div className="mt-4 flex justify-end">
                                 <Button type="primary" onClick={() => router.push("/change-password")}>

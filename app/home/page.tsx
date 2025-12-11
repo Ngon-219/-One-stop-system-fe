@@ -36,21 +36,21 @@ const HomePage = () => {
   const [createRequestLoading, setCreateRequestLoading] = useState<boolean>(false);
   const [mfaEnabled, setMfaEnabled] = useState<boolean>(false);
 
-  useEffect(() => {
-    if (!loading && !isAuthenticated) {
-      router.replace("/login");
-    }
+  // useEffect(() => {
+  //   if (!loading && !isAuthenticated) {
+  //     router.replace("/login");
+  //   }
 
-    if (!loading && user?.role != "student") {
-      Swal.fire({
-        icon: "question",
-        title: "Bạn không có quyền truy cập trang này!",
-        text: "Trang hiện tại chỉ dành cho sinh viên. Tự động quay về trang manager dashboard",
-      });
+  //   if (!loading && user?.role != "student") {
+  //     Swal.fire({
+  //       icon: "question",
+  //       title: "Bạn không có quyền truy cập trang này!",
+  //       text: "Trang hiện tại chỉ dành cho sinh viên. Tự động quay về trang manager dashboard",
+  //     });
 
-      router.replace("manager/dashboard");
-    }
-  }, [loading, isAuthenticated, router, user]);
+  //     router.replace("manager/dashboard");
+  //   }
+  // }, [loading, isAuthenticated, router, user]);
 
   useEffect(() => {
     if (isAuthenticated && user?.role === "student") {
@@ -530,13 +530,14 @@ const HomePage = () => {
                         onChange={handleCertificateSelect}
                         options={certificates.map((cert) => ({
                           value: cert.certificate_id,
-                          label: `${cert.document_type_name} - Ngày cấp: ${cert.issued_date}${cert.expiry_date ? ` - Hết hạn: ${cert.expiry_date}` : ""}`,
+                          label: `${cert.certificate_name || cert.document_type_name} - Ngày cấp: ${cert.issued_date}${cert.expiry_date ? ` - Hết hạn: ${cert.expiry_date}` : ""}`,
                         }))}
                       />
                     </div>
                     {selectedCertificate && (
                       <Card className="mt-4">
                         <div className="space-y-2">
+                          <p><strong>Tên chứng chỉ:</strong> {certificates.find(c => c.certificate_id === selectedCertificate)?.certificate_name || certificates.find(c => c.certificate_id === selectedCertificate)?.document_type_name}</p>
                           <p><strong>Loại:</strong> {certificates.find(c => c.certificate_id === selectedCertificate)?.document_type_name}</p>
                           <p><strong>Ngày cấp:</strong> {certificates.find(c => c.certificate_id === selectedCertificate)?.issued_date}</p>
                           {certificates.find(c => c.certificate_id === selectedCertificate)?.expiry_date && (
@@ -648,7 +649,10 @@ const HomePage = () => {
                         bordered
                         className="bg-white rounded"
                       >
-                        <Descriptions.Item label="Loại chứng chỉ" labelStyle={{ fontWeight: 600, width: '40%' }}>
+                        <Descriptions.Item label="Tên chứng chỉ" labelStyle={{ fontWeight: 600, width: '40%' }}>
+                          {selectedCert.certificate_name || selectedCert.document_type_name}
+                        </Descriptions.Item>
+                        <Descriptions.Item label="Loại chứng chỉ" labelStyle={{ fontWeight: 600 }}>
                           {selectedCert.document_type_name}
                         </Descriptions.Item>
                         <Descriptions.Item label="Ngày cấp" labelStyle={{ fontWeight: 600 }}>

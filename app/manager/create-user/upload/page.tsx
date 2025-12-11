@@ -151,24 +151,36 @@ export default function UploadPageManager() {
         const historyId = item.fileUploadHistoryId;
         
         try {
-            // Gọi API sync DB
             await syncDBApi(historyId);
             message.info("Đã bắt đầu đồng bộ DB...");
         } catch (error: any) {
-            // Nếu status code là 409, có thể đang sync rồi, vẫn hiển thị progress
-            if (error.response?.status === 409) {
-                message.info("Đang kiểm tra tiến trình đồng bộ DB...");
+            // Backend trả về 400 khi file đã được sync rồi
+            if (error.response?.status === 400 || error.response?.status === 409) {
+                message.info("File đã được sync hoặc đang sync. Đang kiểm tra tiến trình...");
             } else {
                 console.error("Failed to sync DB:", error);
                 message.error(`Đồng bộ DB thất bại: ${error.response?.data?.message || error.message}`);
-                return; // Thoát nếu không phải 409
+                return;
             }
         }
         
-        // Bắt đầu poll progress (kể cả khi 409)
         let lastUpdateTime = 0;
-        const UPDATE_THROTTLE = 1000; // Chỉ update UI mỗi 1 giây
+        const UPDATE_THROTTLE = 1000;
         let isPolling = true;
+
+        // Hiển thị thanh progress mặc định 0% ngay khi bắt đầu
+        setSyncProgressMap(prev => ({
+            ...prev,
+            [historyId]: {
+                history_file_upload_id: historyId,
+                status: "pending",
+                total: 0,
+                processed: 0,
+                success: 0,
+                failed: 0,
+                progress_percentage: 0,
+            }
+        }));
             
             const pollProgress = async () => {
                 if (!isPolling) return;
@@ -269,14 +281,13 @@ export default function UploadPageManager() {
             await syncBlockchainApi(historyId);
             message.info("Đã bắt đầu đồng bộ Blockchain...");
         } catch (error: any) {
-            // Nếu status code là 409, có thể đang sync rồi, vẫn hiển thị progress
-            if (error.response?.status === 409) {
-                // Không log error khi 409 vì đây là trường hợp bình thường
-                message.info("Đang kiểm tra tiến trình đồng bộ Blockchain...");
+            // Backend trả về 400 khi file đã được sync rồi
+            if (error.response?.status === 400 || error.response?.status === 409) {
+                message.info("File đã được sync hoặc đang sync. Đang kiểm tra tiến trình...");
             } else {
                 console.error("Failed to sync Blockchain:", error);
                 message.error(`Đồng bộ Blockchain thất bại: ${error.response?.data?.message || error.message}`);
-                return; // Thoát nếu không phải 409
+                return;
             }
         }
         
@@ -284,6 +295,20 @@ export default function UploadPageManager() {
         let lastUpdateTime = 0;
         const UPDATE_THROTTLE = 1000; // Chỉ update UI mỗi 1 giây
         let isPolling = true;
+
+        // Hiển thị thanh progress mặc định 0% ngay khi bắt đầu
+        setSyncProgressMap(prev => ({
+            ...prev,
+            [historyId]: {
+                history_file_upload_id: historyId,
+                status: "pending",
+                total: 0,
+                processed: 0,
+                success: 0,
+                failed: 0,
+                progress_percentage: 0,
+            }
+        }));
         
         const pollProgress = async () => {
             if (!isPolling) return;
@@ -399,25 +424,74 @@ export default function UploadPageManager() {
 
     // Component Progress riêng với memo để tránh re-render không cần thiết
     const ProgressCell = memo(({ progress }: { progress: BulkCreateProgressResponse }) => {
+        // Ẩn progress bar khi đang sync blockchain
+        if (progress.status === "sync_blockchain") {
+            return null;
+        }
+
         const processed = progress.processed ?? 0;
         const total = progress.total ?? 0;
         const success = progress.success ?? 0;
         const failed = progress.failed ?? 0;
-        
-        const progressPercent = useMemo(() => {
-            return progress.progress_percentage || 
-                (total > 0 ? Math.round((processed / total) * 100) : 0);
-        }, [progress.progress_percentage, processed, total]);
 
-        const formatText = useMemo(() => `${processed}/${total}`, [processed, total]);
+        // Một số API có thể chưa trả processed, dùng success+failed làm fallback để hiển thị.
+        const effectiveProcessed = processed > 0 ? processed : success + failed;
+
+        const rawPercent = useMemo(() => {
+            if (progress.progress_percentage !== undefined && progress.progress_percentage !== null) {
+                return progress.progress_percentage;
+            }
+            if (total > 0) {
+                return Math.round((effectiveProcessed / total) * 100);
+            }
+            return 0;
+        }, [progress.progress_percentage, effectiveProcessed, total]);
+
+        // Để thanh có màu xanh đang chạy (giống YouTube) ngay cả khi percent = 0,
+        // đặt tối thiểu 1% khi đang trong trạng thái chạy/pending.
+        const progressPercent = useMemo(() => {
+            const isRunning = ["pending", "sync_db", "sync_blockchain"].includes(progress.status);
+            if (rawPercent <= 0 && isRunning) return 1;
+            return Math.min(Math.max(rawPercent, 0), 100);
+        }, [rawPercent, progress.status]);
+
+        const formatText = useMemo(
+            () => `${effectiveProcessed}/${total}`,
+            [effectiveProcessed, total]
+        );
         const statusText = useMemo(() => `✓ ${success} | ✗ ${failed}`, [success, failed]);
+
+        // Xác định màu và status cho progress bar
+        const getProgressConfig = () => {
+            if (progress.status === "failed") {
+                return {
+                    status: "exception" as const,
+                    strokeColor: "#ff4d4f",
+                };
+            }
+            if (progress.status === "completed") {
+                return {
+                    status: "success" as const,
+                    strokeColor: "#52c41a",
+                };
+            }
+            // Đang chạy - màu xanh
+            return {
+                status: "active" as const,
+                strokeColor: "#1890ff",
+            };
+        };
+
+        const progressConfig = getProgressConfig();
 
         return (
             <div className="w-full min-w-[250px]">
                 <Progress 
                     percent={progressPercent}
-                    status={progress.status === "failed" ? "exception" : "active"}
+                    status={progressConfig.status}
+                    strokeColor={progressConfig.strokeColor}
                     format={() => formatText}
+                    showInfo={true}
                 />
                 <div className="mt-1 text-xs text-gray-500 whitespace-nowrap">
                     {statusText}
@@ -431,7 +505,8 @@ export default function UploadPageManager() {
             prevProps.progress.status === nextProps.progress.status &&
             prevProps.progress.success === nextProps.progress.success &&
             prevProps.progress.failed === nextProps.progress.failed &&
-            prevProps.progress.total === nextProps.progress.total
+            prevProps.progress.total === nextProps.progress.total &&
+            prevProps.progress.progress_percentage === nextProps.progress.progress_percentage
         );
     });
     ProgressCell.displayName = 'ProgressCell';
@@ -468,10 +543,27 @@ export default function UploadPageManager() {
             width: 300,
             render: (_: any, record: TableUploadHistory) => {
                 const progress = syncProgressMap[record.fileUploadHistoryId];
-                if (!progress) {
+                // Không hiển thị progress bar khi đang sync blockchain
+                if (record.status === "sync_blockchain") {
                     return null;
                 }
-                return <ProgressCell progress={progress} />;
+                
+                const shouldShowPlaceholder = ["pending", "sync_db"].includes(record.status);
+
+                if (progress) {
+                    return <ProgressCell progress={progress} />;
+                }
+
+                if (shouldShowPlaceholder) {
+                    return (
+                        <div className="w-full min-w-[250px]">
+                            <Progress percent={0} status="active" format={() => "0/0"} />
+                            <div className="mt-1 text-xs text-gray-500 whitespace-nowrap">✓ 0 | ✗ 0</div>
+                        </div>
+                    );
+                }
+
+                return null;
             },
         },
         {
